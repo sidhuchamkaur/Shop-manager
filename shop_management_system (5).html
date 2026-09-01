@@ -1,0 +1,3161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Vyapar - POS, Khata & Shop Management System</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            hdfc: {
+              blue: '#004c8f',
+              darkblue: '#002f6c',
+              navy: '#001e47',
+              red: '#ed1c24',
+              darkred: '#c0151c',
+              light: '#f4f7fb',
+              accent: '#eaf2fa',
+              border: '#dbeafe'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- PDF Export Libraries (for downloading Invoices/Bills/Reports as PDF) -->
+  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Print & Invoice Styles */
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+      }
+      header, nav, #toast, #modalOverlay:not(.print-modal), .no-print, button, .action-column {
+        display: none !important;
+      }
+      /* Only show the invoice sheet when actually printing an invoice */
+      body.printing-invoice #invoicePrintContainer {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 10px !important;
+        background: white !important;
+      }
+      body:not(.printing-invoice) #invoicePrintContainer {
+        display: none !important;
+      }
+      /* Only show the reports section when actually printing a report/statement */
+      body.printing-report #view-reports {
+        display: block !important;
+      }
+      body:not(.printing-report) #view-reports {
+        display: none !important;
+      }
+      .report-card {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+      }
+      table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+      th, td {
+        border: 1px solid #cbd5e1 !important;
+        padding: 6px 8px !important;
+      }
+      th {
+        background-color: #f1f5f9 !important;
+        color: #002f6c !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans selection:bg-hdfc-blue selection:text-white">
+
+  <!-- ===================== TOP NAVIGATION BAR ===================== -->
+  <header class="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-md">
+    <!-- Top HDFC Bank Red Gradient Accent -->
+    <div class="h-1.5 bg-gradient-to-r from-hdfc-red via-hdfc-blue to-hdfc-darkblue"></div>
+
+    <div class="max-w-[96rem] mx-auto px-3 sm:px-6">
+      
+      <!-- Upper Header Row -->
+      <div class="flex items-center justify-between py-2.5 border-b border-slate-100 flex-wrap gap-2">
+        <!-- Shop Branding & Quick Details -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-hdfc-blue to-hdfc-navy flex items-center justify-center shadow-md text-white flex-shrink-0">
+            <i data-lucide="store" class="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 id="shopNameDisplay" class="font-black text-sm sm:text-base text-hdfc-darkblue tracking-tight">
+                Shree Ganesh Supermarket & Traders
+              </h1>
+              <span id="posActiveBadge" class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span> POS Active
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+              <span>Owner: <strong id="shopOwnerDisplay" class="text-slate-700 font-semibold">Suresh Sharma</strong></span>
+              <span class="hidden md:inline">• UPI: <code id="shopUpiDisplay" class="text-hdfc-blue font-mono font-bold">suresh.kirana@upi</code></span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Right Header Controls: POS Feature Toggle, QR Modal, Auto-Sync & Action -->
+        <div class="flex items-center space-x-2 sm:space-x-3 flex-wrap">
+          <!-- POS & Billing Feature ON/OFF Switcher -->
+          <div class="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-2.5 py-1.5 gap-2 shadow-inner" title="Toggle Point of Sale, Inventory & Billing Features">
+            <div class="flex flex-col text-right">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">POS & Stock</span>
+              <span id="posToggleStatusText" class="text-[11px] font-black text-emerald-700">ENABLED</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="posMasterToggle" checked onchange="togglePOSFeature(this.checked)" class="sr-only peer">
+              <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          <!-- Counter Show QR Button -->
+          <button onclick="showCounterQRModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-hdfc-darkblue font-bold text-xs shadow-sm transition active:scale-95" title="Display Counter Payment QR Code">
+            <i data-lucide="qr-code" class="w-4 h-4 text-hdfc-blue"></i>
+            <span class="hidden sm:inline">Show QR</span>
+          </button>
+
+          <!-- Backup Sync Indicator Button -->
+          <button onclick="switchTab('backup')" id="navFolderStatusBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 transition shadow-sm" title="Connected Storage Directory">
+            <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-amber-600" id="folderSyncIcon"></i>
+            <span id="navFolderLabel" class="hidden md:inline">Connect Storage</span>
+            <span id="folderLiveDot" class="hidden w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          </button>
+
+          <!-- Quick Add Button -->
+          <button onclick="openQuickModal()" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-hdfc-red hover:bg-hdfc-darkred text-white font-black text-xs sm:text-sm shadow-md shadow-red-200 transition active:scale-95">
+            <i data-lucide="plus-circle" class="w-4 h-4 stroke-[2.5]"></i>
+            <span>+ Quick Add</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs (Fully visible, responsive multi-row or scroll-free flex) -->
+      <nav class="flex flex-wrap items-center gap-1 sm:gap-1.5 py-2 text-xs font-semibold">
+        <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition bg-hdfc-accent text-hdfc-blue font-black border border-hdfc-border shadow-sm">
+          <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
+          <span>Dashboard</span>
+        </button>
+
+        <!-- POS Feature Specific Tabs (Toggled) -->
+        <button onclick="switchTab('pos')" id="tab-btn-pos" class="pos-feature-item tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200">
+          <i data-lucide="shopping-cart" class="w-3.5 h-3.5 text-emerald-600"></i>
+          <span>Sales POS Terminal</span>
+          <span class="px-1.5 py-0.2 rounded text-[10px] bg-emerald-200 text-emerald-900 font-extrabold">NEW</span>
+        </button>
+
+        <button onclick="switchTab('inventory')" id="tab-btn-inventory" class="pos-feature-item tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="boxes" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span>Inventory & Stock</span>
+          <span id="lowStockBadge" class="hidden px-1.5 py-0.2 text-[10px] rounded-full bg-red-100 border border-red-200 text-red-700 font-black"></span>
+        </button>
+
+        <button onclick="switchTab('invoices')" id="tab-btn-invoices" class="pos-feature-item tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="receipt" class="w-3.5 h-3.5 text-purple-600"></i>
+          <span>Bills & Invoices</span>
+        </button>
+
+        <!-- Standard Khata & Ledger Tabs -->
+        <button onclick="switchTab('customers')" id="tab-btn-customers" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="users" class="w-3.5 h-3.5 text-blue-600"></i>
+          <span>Customer Khata</span>
+          <span id="navUdharBadge" class="hidden px-1.5 py-0.2 text-[10px] rounded-full bg-red-100 border border-red-200 text-red-700 font-bold"></span>
+        </button>
+
+        <button onclick="switchTab('income')" id="tab-btn-income" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="arrow-down-left" class="w-3.5 h-3.5 text-emerald-600"></i>
+          <span>Daily Income</span>
+        </button>
+
+        <button onclick="switchTab('expenses')" id="tab-btn-expenses" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 text-hdfc-red"></i>
+          <span>Daily Expenses</span>
+        </button>
+
+        <button onclick="switchTab('upi')" id="tab-btn-upi" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="qr-code" class="w-3.5 h-3.5 text-cyan-600"></i>
+          <span>UPI Records</span>
+        </button>
+
+        <button onclick="switchTab('retailers')" id="tab-btn-retailers" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="truck" class="w-3.5 h-3.5 text-amber-600"></i>
+          <span>Suppliers & Brands</span>
+        </button>
+
+        <button onclick="switchTab('reports')" id="tab-btn-reports" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="printer" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span>Reports & Print</span>
+        </button>
+
+        <button onclick="switchTab('profile')" id="tab-btn-profile" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="user-cog" class="w-3.5 h-3.5 text-slate-600"></i>
+          <span>Profile & QR</span>
+        </button>
+
+        <button onclick="switchTab('backup')" id="tab-btn-backup" class="tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100">
+          <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-slate-600"></i>
+          <span>Auto-Sync</span>
+        </button>
+      </nav>
+
+    </div>
+  </header>
+
+  <!-- ===================== TOAST NOTIFICATION CONTAINER ===================== -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden flex items-center gap-3 px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-2xl text-sm transition-all duration-300">
+    <i id="toastIcon" data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600"></i>
+    <span id="toastMsg" class="text-slate-800 font-semibold"></span>
+    <button onclick="hideToast()" class="text-slate-400 hover:text-slate-600 ml-2">
+      <i data-lucide="x" class="w-4 h-4"></i>
+    </button>
+  </div>
+
+  <!-- ===================== MAIN APP CONTAINER ===================== -->
+  <main class="flex-1 max-w-[96rem] w-full mx-auto p-3 sm:p-6 space-y-6">
+
+    <!-- ========================================================
+         TAB 1: DASHBOARD OVERVIEW
+    ======================================================== -->
+    <section id="view-dashboard" class="space-y-6">
+      <!-- KPI Stats Cards Grid -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <!-- Today Total Revenue -->
+        <div class="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
+          <div class="flex items-center justify-between text-xs text-slate-500 mb-2">
+            <span class="font-bold uppercase tracking-wider">Today's Inflow / Sales</span>
+            <span class="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+              <i data-lucide="trending-up" class="w-4 h-4"></i>
+            </span>
+          </div>
+          <div id="dashTodayIncome" class="text-xl sm:text-3xl font-black text-hdfc-darkblue tracking-tight">₹0</div>
+          <div class="mt-2 text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+            <i data-lucide="arrow-down-left" class="w-3 h-3"></i> POS Invoices & Cash Register
+          </div>
+        </div>
+
+        <!-- Today Expenses -->
+        <div class="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
+          <div class="flex items-center justify-between text-xs text-slate-500 mb-2">
+            <span class="font-bold uppercase tracking-wider">Today's Expenses</span>
+            <span class="p-2 rounded-lg bg-red-50 text-hdfc-red">
+              <i data-lucide="trending-down" class="w-4 h-4"></i>
+            </span>
+          </div>
+          <div id="dashTodayExpense" class="text-xl sm:text-3xl font-black text-hdfc-red tracking-tight">₹0</div>
+          <div class="mt-2 text-[11px] text-slate-500">Rent, Freight, Bills & Refreshments</div>
+        </div>
+
+        <!-- Customer Udhar Receivable -->
+        <div class="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
+          <div class="flex items-center justify-between text-xs text-slate-500 mb-2">
+            <span class="font-bold uppercase tracking-wider">Customer Dues (Receivable)</span>
+            <span class="p-2 rounded-lg bg-amber-50 text-amber-600">
+              <i data-lucide="users" class="w-4 h-4"></i>
+            </span>
+          </div>
+          <div id="dashMarketUdhar" class="text-xl sm:text-3xl font-black text-amber-700 tracking-tight">₹0</div>
+          <div id="dashCustCount" class="mt-2 text-[11px] text-slate-500">0 Active Ledgers</div>
+        </div>
+
+        <!-- Total Stock Valuation & Low Stock Warning -->
+        <div class="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
+          <div class="flex items-center justify-between text-xs text-slate-500 mb-2">
+            <span class="font-bold uppercase tracking-wider">Inventory Value</span>
+            <span class="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+              <i data-lucide="boxes" class="w-4 h-4"></i>
+            </span>
+          </div>
+          <div id="dashStockValue" class="text-xl sm:text-3xl font-black text-indigo-900 tracking-tight">₹0</div>
+          <div id="dashLowStockCount" class="mt-2 text-[11px] text-red-600 font-bold">0 Items on Low Stock</div>
+        </div>
+      </div>
+
+      <!-- Quick Action Shortcuts Grid -->
+      <div class="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        <h3 class="text-xs font-bold text-hdfc-darkblue uppercase tracking-wider mb-4 flex items-center gap-2">
+          <i data-lucide="layers" class="w-4 h-4 text-hdfc-red"></i>
+          <span>Instant Operations & POS Tools</span>
+        </h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          <button onclick="switchTab('pos')" class="p-3.5 rounded-xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 flex flex-col items-center justify-center gap-2 text-center transition group">
+            <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center group-hover:scale-105 transition shadow-sm">
+              <i data-lucide="shopping-cart" class="w-5 h-5"></i>
+            </div>
+            <span class="text-xs font-black text-slate-800">Launch POS Billing</span>
+          </button>
+
+          <button onclick="openModal('product')" class="p-3.5 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 flex flex-col items-center justify-center gap-2 text-center transition group">
+            <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center group-hover:scale-105 transition shadow-sm">
+              <i data-lucide="package-plus" class="w-5 h-5"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-700">+ Add Product</span>
+          </button>
+
+          <button onclick="openModal('customer')" class="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 flex flex-col items-center justify-center gap-2 text-center transition group">
+            <div class="w-10 h-10 rounded-xl bg-blue-100 text-hdfc-blue flex items-center justify-center group-hover:scale-105 transition shadow-sm">
+              <i data-lucide="user-plus" class="w-5 h-5"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-700">+ Add Customer</span>
+          </button>
+
+          <button onclick="openModal('expense')" class="p-3.5 rounded-xl bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 flex flex-col items-center justify-center gap-2 text-center transition group">
+            <div class="w-10 h-10 rounded-xl bg-red-100 text-hdfc-red flex items-center justify-center group-hover:scale-105 transition shadow-sm">
+              <i data-lucide="arrow-up-right" class="w-5 h-5"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-700">+ Add Expense</span>
+          </button>
+
+          <button onclick="showCounterQRModal()" class="p-3.5 rounded-xl bg-slate-50 hover:bg-cyan-50 border border-slate-200 hover:border-cyan-300 flex flex-col items-center justify-center gap-2 text-center transition group">
+            <div class="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center group-hover:scale-105 transition shadow-sm">
+              <i data-lucide="qr-code" class="w-5 h-5"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-700">Display QR Code</span>
+          </button>
+
+          <button onclick="switchTab('reports')" class="p-3.5 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 flex flex-col items-center justify-center gap-2 text-center transition group">
+            <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center group-hover:scale-105 transition shadow-sm">
+              <i data-lucide="printer" class="w-5 h-5"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-700">Print Statement</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Split Grid: Recent Invoices & Top Customer Dues -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Invoices -->
+        <div class="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="receipt" class="w-4 h-4 text-hdfc-blue"></i>
+              <h3 class="font-bold text-slate-800 text-sm">Recent POS Invoices</h3>
+            </div>
+            <button onclick="switchTab('invoices')" class="text-xs font-bold text-hdfc-blue hover:underline flex items-center gap-1">
+              <span>View All</span>
+              <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div id="dashRecentInvoicesList" class="divide-y divide-slate-100"></div>
+        </div>
+
+        <!-- Top Udhar Customers -->
+        <div class="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="users" class="w-4 h-4 text-amber-600"></i>
+              <h3 class="font-bold text-slate-800 text-sm">Top Pending Customer Dues</h3>
+            </div>
+            <button onclick="switchTab('customers')" class="text-xs font-bold text-hdfc-blue hover:underline flex items-center gap-1">
+              <span>View Khata</span>
+              <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div id="dashTopUdharList" class="divide-y divide-slate-100"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         TAB 2: SALES POS (POINT OF SALE) TERMINAL
+    ======================================================== -->
+    <section id="view-pos" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Left 7 Columns: Product Picker & Fast Search -->
+        <div class="lg:col-span-7 space-y-4">
+          <!-- Search & Filter Controls -->
+          <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3">
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                <input type="text" id="posProductSearch" oninput="renderPosProducts()" placeholder="Search item by name, barcode, or SKU..." class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-hdfc-blue text-sm font-medium">
+              </div>
+              <button onclick="openModal('product')" class="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">New Product</span>
+              </button>
+            </div>
+
+            <!-- Categories pills -->
+            <div id="posCategoryPills" class="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Product Catalog Cards Grid -->
+          <div id="posProductsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[640px] overflow-y-auto pr-1">
+            <!-- Dynamic product cards -->
+          </div>
+        </div>
+
+        <!-- Right 5 Columns: Active Sales Cart & Checkout Drawer -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="p-5 rounded-2xl bg-white border border-slate-200 shadow-md space-y-4 sticky top-24">
+            
+            <!-- Cart Header & Customer Selector -->
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div class="flex items-center gap-2">
+                <i data-lucide="shopping-bag" class="w-5 h-5 text-hdfc-blue"></i>
+                <h3 class="font-black text-hdfc-darkblue text-base">Current Cart</h3>
+              </div>
+              <button onclick="clearPosCart()" class="text-xs font-bold text-slate-400 hover:text-red-600 transition flex items-center gap-1">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span>Clear</span>
+              </button>
+            </div>
+
+            <!-- Customer Picker for Bill -->
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Customer / Ledger Link</label>
+              <select id="posCustomerSelect" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold focus:outline-none focus:border-hdfc-blue">
+                <option value="WALK_IN">Walk-in Customer (Cash / Counter)</option>
+                <!-- Dynamically populated with customers -->
+              </select>
+            </div>
+
+            <!-- Cart Items List -->
+            <div id="posCartItemsList" class="divide-y divide-slate-100 max-h-60 overflow-y-auto pr-1 space-y-1 text-sm">
+              <!-- Dynamically populated cart items -->
+            </div>
+
+            <!-- Bill Calculations Box -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+              <div class="flex justify-between text-slate-600">
+                <span>Subtotal:</span>
+                <span id="posSubtotalText" class="font-bold font-mono">₹0.00</span>
+              </div>
+              
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-slate-600">Discount (₹):</span>
+                <input type="number" id="posDiscountInput" value="0" min="0" oninput="calculatePosBill()" class="w-20 px-2 py-1 text-right rounded-lg bg-white border border-slate-300 text-slate-800 font-bold focus:outline-none focus:border-hdfc-blue">
+              </div>
+
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-slate-600">GST / Tax (%):</span>
+                <input type="number" id="posTaxInput" value="0" min="0" oninput="calculatePosBill()" class="w-20 px-2 py-1 text-right rounded-lg bg-white border border-slate-300 text-slate-800 font-bold focus:outline-none focus:border-hdfc-blue">
+              </div>
+
+              <div class="border-t border-slate-200 pt-2 flex justify-between items-center text-sm">
+                <span class="font-black text-hdfc-darkblue uppercase">Total Payable:</span>
+                <span id="posGrandTotalText" class="font-black text-xl text-emerald-700 font-mono">₹0.00</span>
+              </div>
+            </div>
+
+            <!-- Payment Method Select & Complete Order -->
+            <div class="space-y-3 pt-1">
+              <label class="block text-[11px] font-bold text-slate-600 uppercase">Payment Mode</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button type="button" onclick="setPosPaymentMode('CASH')" id="posPayModeCash" class="py-2 px-2 rounded-xl text-xs font-bold border transition bg-emerald-100 border-emerald-400 text-emerald-900 flex items-center justify-center gap-1">
+                  <i data-lucide="banknote" class="w-3.5 h-3.5"></i> CASH
+                </button>
+                <button type="button" onclick="setPosPaymentMode('UPI')" id="posPayModeUPI" class="py-2 px-2 rounded-xl text-xs font-bold border transition bg-slate-100 border-slate-300 text-slate-700 flex items-center justify-center gap-1">
+                  <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> UPI / QR
+                </button>
+                <button type="button" onclick="setPosPaymentMode('CREDIT')" id="posPayModeCredit" class="py-2 px-2 rounded-xl text-xs font-bold border transition bg-slate-100 border-slate-300 text-slate-700 flex items-center justify-center gap-1">
+                  <i data-lucide="users" class="w-3.5 h-3.5"></i> UDHAR
+                </button>
+              </div>
+
+              <button onclick="checkoutPosOrder()" class="w-full py-3.5 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 transition active:scale-95">
+                <i data-lucide="printer" class="w-5 h-5"></i>
+                <span>Complete & Generate Invoice</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================================
+         TAB 3: INVENTORY & STOCK MANAGEMENT
+    ======================================================== -->
+    <section id="view-inventory" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        <div class="flex items-center gap-4">
+          <div>
+            <span class="text-xs text-slate-500 font-medium">Total Products</span>
+            <h3 id="invProductCountHeader" class="text-2xl font-black text-hdfc-darkblue">0 Items</h3>
+          </div>
+          <div class="border-l border-slate-200 pl-4">
+            <span class="text-xs text-slate-500 font-medium">Low Stock Alerts</span>
+            <h3 id="invLowStockHeader" class="text-2xl font-black text-red-600">0 Items</h3>
+          </div>
+        </div>
+        
+        <div class="flex items-center gap-2 flex-wrap">
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+            <input type="text" id="invSearchInput" oninput="renderInventoryTable()" placeholder="Search product / SKU..." class="pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-medium text-slate-800 focus:outline-none focus:border-hdfc-blue">
+          </div>
+          <button onclick="openModal('product')" class="px-4 py-2 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
+            <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i>
+            <span>+ Add New Product</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Inventory Table -->
+      <div class="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-700">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase border-b border-slate-200 font-bold">
+              <tr>
+                <th class="px-4 py-3">SKU / Code</th>
+                <th class="px-4 py-3">Product Name & Category</th>
+                <th class="px-4 py-3 text-right">Cost Price (₹)</th>
+                <th class="px-4 py-3 text-right">Selling Price (₹)</th>
+                <th class="px-4 py-3 text-center">In Stock</th>
+                <th class="px-4 py-3 text-center">Status</th>
+                <th class="px-4 py-3 text-center">Quick Stock Adjust</th>
+                <th class="px-4 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryTableBody" class="divide-y divide-slate-100">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         TAB 4: INVOICES & BILLING HISTORY
+    ======================================================== -->
+    <section id="view-invoices" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        <div>
+          <span class="text-xs text-slate-500 font-medium">Total Invoices Generated</span>
+          <h3 id="totalInvoicesCountHeader" class="text-2xl font-black text-hdfc-darkblue">0 Invoices</h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="text" id="invoiceSearchInput" oninput="renderInvoicesList()" placeholder="Search invoice # or customer..." class="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-hdfc-blue">
+          <button onclick="switchTab('pos')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
+            <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+            <span>+ Create Bill in POS</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-700">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase border-b border-slate-200 font-bold">
+              <tr>
+                <th class="px-4 py-3">Invoice #</th>
+                <th class="px-4 py-3">Date & Time</th>
+                <th class="px-4 py-3">Customer</th>
+                <th class="px-4 py-3">Payment Mode</th>
+                <th class="px-4 py-3 text-center">Items Count</th>
+                <th class="px-4 py-3 text-right">Grand Total (₹)</th>
+                <th class="px-4 py-3 text-center">Print / View</th>
+              </tr>
+            </thead>
+            <tbody id="invoicesTableBody" class="divide-y divide-slate-100">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         TAB 5: CUSTOMER KHATA (UDHAR / JAMA)
+    ======================================================== -->
+    <section id="view-customers" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input type="text" id="custSearchInput" oninput="renderCustomers()" placeholder="Search customer by name or phone number..." class="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-hdfc-blue text-sm">
+        </div>
+        <div>
+          <button onclick="openModal('customer')" class="w-full sm:w-auto px-4 py-2 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-sm flex items-center justify-center gap-1.5 shadow-md transition">
+            <i data-lucide="user-plus" class="w-4 h-4 stroke-[2.5]"></i>
+            <span>+ Open Customer Account</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Customers Grid -->
+      <div id="customersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- ========================================================
+         TAB 6: DAILY INCOME
+    ======================================================== -->
+    <section id="view-income" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        <div>
+          <span class="text-xs text-slate-500 font-medium">Total Recorded Income</span>
+          <h3 id="totalIncomeHeader" class="text-2xl font-black text-emerald-600">₹0</h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="date" id="incomeDateFilter" onchange="renderIncome()" class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-700 focus:outline-none focus:border-hdfc-blue">
+          <button onclick="openModal('income')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center gap-1.5 shadow transition">
+            <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i>
+            <span>+ Add Income Entry</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-700">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase border-b border-slate-200 font-bold">
+              <tr>
+                <th class="px-4 py-3">Date</th>
+                <th class="px-4 py-3">Description / Source</th>
+                <th class="px-4 py-3">Payment Mode</th>
+                <th class="px-4 py-3">Remarks</th>
+                <th class="px-4 py-3 text-right">Amount (₹)</th>
+                <th class="px-4 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="incomeTableBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         TAB 7: DAILY EXPENSES
+    ======================================================== -->
+    <section id="view-expenses" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        <div>
+          <span class="text-xs text-slate-500 font-medium">Total Recorded Expenses</span>
+          <h3 id="totalExpenseHeader" class="text-2xl font-black text-hdfc-red">₹0</h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openModal('expense')" class="px-4 py-2 rounded-xl bg-hdfc-red hover:bg-hdfc-darkred text-white font-bold text-sm flex items-center gap-1.5 shadow transition">
+            <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i>
+            <span>+ Add Expense Record</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-700">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase border-b border-slate-200 font-bold">
+              <tr>
+                <th class="px-4 py-3">Date</th>
+                <th class="px-4 py-3">Category</th>
+                <th class="px-4 py-3">Paid To</th>
+                <th class="px-4 py-3">Payment Mode</th>
+                <th class="px-4 py-3">Notes</th>
+                <th class="px-4 py-3 text-right">Amount (₹)</th>
+                <th class="px-4 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="expenseTableBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         TAB 8: UPI TRANSACTIONS
+    ======================================================== -->
+    <section id="view-upi" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        <div>
+          <span class="text-xs text-slate-500 font-medium">Total Verified UPI Inflow</span>
+          <h3 id="totalUpiHeader" class="text-2xl font-black text-hdfc-blue">₹0</h3>
+        </div>
+        <div>
+          <button onclick="openModal('upi')" class="px-4 py-2 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-sm flex items-center gap-1.5 shadow transition">
+            <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i>
+            <span>+ Record UPI Payment</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="upiGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- ========================================================
+         TAB 9: RETAILERS & BRANDS
+    ======================================================== -->
+    <section id="view-retailers" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+        <div>
+          <span class="text-xs text-slate-500 font-medium">Total Supplier Balance (Payable)</span>
+          <h3 id="totalRetailerDuesHeader" class="text-2xl font-black text-amber-700">₹0</h3>
+        </div>
+        <div>
+          <button onclick="openModal('retailer')" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm flex items-center gap-1.5 shadow transition">
+            <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i>
+            <span>+ Add Supplier / Brand</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="retailersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- ========================================================
+         TAB 10: REPORTS & PRINTING
+    ======================================================== -->
+    <section id="view-reports" class="hidden space-y-6">
+      <!-- Filter Control Card -->
+      <div class="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 no-print">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h3 class="font-bold text-hdfc-darkblue text-base flex items-center gap-2">
+            <i data-lucide="filter" class="w-5 h-5 text-hdfc-red"></i>
+            <span>Statements & Account Reports</span>
+          </h3>
+          <div class="flex items-center gap-2">
+            <button onclick="printCurrentReport()" class="px-4 py-2 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow transition">
+              <i data-lucide="printer" class="w-4 h-4"></i>
+              <span>Print Statement</span>
+            </button>
+            <button onclick="downloadReportPDF()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow transition">
+              <i data-lucide="file-down" class="w-4 h-4"></i>
+              <span>Download PDF</span>
+            </button>
+            <button onclick="exportFilteredCSV()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow transition">
+              <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400"></i>
+              <span>Export CSV</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Report Category</label>
+            <select id="reportCategorySelect" onchange="generateReport()" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs font-medium focus:outline-none focus:border-hdfc-blue">
+              <option value="ALL">All Financial Records (Comprehensive)</option>
+              <option value="INVOICES">POS Invoices / Sales</option>
+              <option value="INCOME">Daily Income Only</option>
+              <option value="EXPENSE">Daily Expenses Only</option>
+              <option value="UDHAR_JAMA">Customer Credit & Debit (Udhaar/Jama)</option>
+              <option value="UPI">UPI Digital Payments Only</option>
+              <option value="RETAILER">Suppliers & Brand Balances</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Quick Date Range</label>
+            <select id="reportQuickDate" onchange="setQuickDateRange(this.value)" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs font-medium focus:outline-none focus:border-hdfc-blue">
+              <option value="ALL_TIME">All Time</option>
+              <option value="TODAY">Today</option>
+              <option value="YESTERDAY">Yesterday</option>
+              <option value="LAST_7_DAYS">Last 7 Days</option>
+              <option value="THIS_MONTH">This Month</option>
+              <option value="CUSTOM">Custom Date Range</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">From Date</label>
+            <input type="date" id="reportStartDate" onchange="generateReport()" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none focus:border-hdfc-blue">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">To Date</label>
+            <input type="date" id="reportEndDate" onchange="generateReport()" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none focus:border-hdfc-blue">
+          </div>
+        </div>
+      </div>
+
+      <!-- Printable Report Sheet Container -->
+      <div id="printableReportArea" class="report-card p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-6">
+        
+        <!-- Header for statement -->
+        <div class="border-b-2 border-hdfc-blue pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-hdfc-blue text-white flex items-center justify-center font-black text-sm">
+                SB
+              </div>
+              <h2 id="reportShopTitle" class="text-xl font-black text-hdfc-darkblue uppercase tracking-wide">
+                Shree Ganesh Supermarket & Traders
+              </h2>
+            </div>
+            <p id="reportShopMeta" class="text-xs text-slate-500 mt-1">
+              Shop #14, Main Market, Gandhi Chowk • Contact: 9876543210 • UPI: suresh.kirana@upi
+            </p>
+          </div>
+          <div class="text-left sm:text-right">
+            <span class="inline-block px-3 py-1 rounded bg-hdfc-accent text-hdfc-blue font-bold text-xs uppercase tracking-wider">
+              Financial Statement
+            </span>
+            <div id="reportPeriodText" class="text-xs text-slate-600 font-semibold mt-1">Period: All Records</div>
+            <div id="reportGeneratedTime" class="text-[10px] text-slate-400">Generated: -</div>
+          </div>
+        </div>
+
+        <!-- Summary Metric Boxes -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div>
+            <div class="text-[11px] font-bold text-slate-500 uppercase">Filtered Inflow (Income)</div>
+            <div id="repSumIncome" class="text-lg font-black text-emerald-600">₹0</div>
+          </div>
+          <div>
+            <div class="text-[11px] font-bold text-slate-500 uppercase">Filtered Outflow (Expense)</div>
+            <div id="repSumExpense" class="text-lg font-black text-hdfc-red">₹0</div>
+          </div>
+          <div>
+            <div class="text-[11px] font-bold text-slate-500 uppercase">Net Balance</div>
+            <div id="repSumNet" class="text-lg font-black text-hdfc-blue">₹0</div>
+          </div>
+          <div>
+            <div class="text-[11px] font-bold text-slate-500 uppercase">Total Transactions</div>
+            <div id="repSumCount" class="text-lg font-black text-slate-700">0</div>
+          </div>
+        </div>
+
+        <!-- Statement Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-700">
+            <thead class="bg-hdfc-darkblue text-white text-xs uppercase font-bold">
+              <tr>
+                <th class="px-3 py-2.5">Date</th>
+                <th class="px-3 py-2.5">Category / Type</th>
+                <th class="px-3 py-2.5">Party / Particulars</th>
+                <th class="px-3 py-2.5">Payment Mode</th>
+                <th class="px-3 py-2.5">Remarks / Details</th>
+                <th class="px-3 py-2.5 text-right">Inflow (+)</th>
+                <th class="px-3 py-2.5 text-right">Outflow (-)</th>
+              </tr>
+            </thead>
+            <tbody id="reportTableBody" class="divide-y divide-slate-200">
+              <!-- Dynamically Populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         TAB 11: PROFILE & QR CODE MANAGEMENT
+    ======================================================== -->
+    <section id="view-profile" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Profile Details Card (Left 7 Cols) -->
+        <div class="lg:col-span-7 p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center gap-3 border-b border-slate-100 pb-3">
+            <div class="w-10 h-10 rounded-xl bg-hdfc-accent text-hdfc-blue flex items-center justify-center font-bold">
+              <i data-lucide="store" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-base text-hdfc-darkblue">Business & Store Profile</h3>
+              <p class="text-xs text-slate-500">Edit your store name, owner, and tax billing details.</p>
+            </div>
+          </div>
+
+          <form onsubmit="saveProfileDetails(event)" class="space-y-3 pt-2">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Store / Business Name *</label>
+              <input type="text" id="profShopName" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-sm font-semibold focus:outline-none focus:border-hdfc-blue">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Proprietor / Owner Name</label>
+                <input type="text" id="profOwnerName" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-sm focus:outline-none focus:border-hdfc-blue">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Contact Phone Number</label>
+                <input type="tel" id="profPhone" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-sm focus:outline-none focus:border-hdfc-blue">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Business UPI ID *</label>
+                <input type="text" id="profUpiId" required class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-hdfc-blue font-mono font-bold text-sm focus:outline-none focus:border-hdfc-blue">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">GSTIN / Tax No (Optional)</label>
+                <input type="text" id="profGstin" placeholder="e.g. 08AAAAA0000A1Z5" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-mono text-sm focus:outline-none focus:border-hdfc-blue">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Complete Address / Landmark</label>
+              <textarea id="profAddress" rows="2" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none focus:border-hdfc-blue"></textarea>
+            </div>
+
+            <div class="pt-2">
+              <button type="submit" class="px-6 py-2.5 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-sm shadow transition">
+                Save Store Profile
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- QR Code Upload & Preview (Right 5 Cols) -->
+        <div class="lg:col-span-5 p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center gap-3 border-b border-slate-100 pb-3">
+            <div class="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-800 flex items-center justify-center font-bold">
+              <i data-lucide="qr-code" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-base text-hdfc-darkblue">Shop Payment QR Code</h3>
+              <p class="text-xs text-slate-500">Upload your PhonePe, GooglePay, Paytm, or Bank QR image.</p>
+            </div>
+          </div>
+
+          <div class="flex flex-col items-center justify-center p-4 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-3">
+            <div class="w-48 h-48 rounded-xl bg-white border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden shadow-inner relative group">
+              <img id="profileQrImagePreview" src="" alt="Shop Payment QR" class="w-full h-full object-contain p-2">
+              <div id="noQrPlaceholder" class="flex flex-col items-center text-slate-400 p-3">
+                <i data-lucide="image" class="w-8 h-8 mb-1"></i>
+                <span class="text-xs font-semibold">No QR Image Uploaded</span>
+              </div>
+            </div>
+
+            <div class="space-y-2 w-full max-w-xs">
+              <input type="file" id="qrFileInput" accept="image/*" onchange="handleQrImageUpload(event)" class="hidden">
+              <button onclick="document.getElementById('qrFileInput').click()" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs flex items-center justify-center gap-2 shadow transition">
+                <i data-lucide="upload" class="w-4 h-4"></i>
+                <span>Upload QR Image</span>
+              </button>
+
+              <button onclick="removeUploadedQrImage()" id="removeQrBtn" class="w-full py-1.5 rounded-xl bg-red-50 text-hdfc-red border border-red-200 font-bold text-xs hover:bg-red-100 transition hidden">
+                Remove Custom QR Image
+              </button>
+            </div>
+
+            <p class="text-[11px] text-slate-500">
+              Customers scanning this code can pay directly to: <br>
+              <strong id="qrPreviewUpiLabel" class="text-hdfc-blue font-mono font-bold">suresh.kirana@upi</strong>
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================================
+         TAB 12: BACKUP & AUTO-SYNC
+    ======================================================== -->
+    <section id="view-backup" class="hidden space-y-6">
+      <div class="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-5">
+        <div class="flex items-start justify-between flex-wrap gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-hdfc-accent text-hdfc-blue flex items-center justify-center">
+              <i data-lucide="hard-drive" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-hdfc-darkblue">Local Storage Auto-Sync Backup</h3>
+              <p class="text-xs text-slate-500">
+                Pick a folder on your computer. Every newly added invoice, ledger entry, or product immediately syncs locally.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <button onclick="selectBackupFolder()" class="px-4 py-2.5 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-sm flex items-center gap-2 shadow-md transition active:scale-95">
+              <i data-lucide="folder-open" class="w-4 h-4"></i>
+              <span id="folderBtnLabel">📂 Select Storage Folder</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2 text-slate-700">
+              <span class="font-bold">Connected Directory:</span>
+              <span id="folderNameStatus" class="font-mono text-amber-700 font-bold">❌ No folder connected</span>
+            </div>
+            <div class="text-slate-500">
+              Last Synchronized: <span id="lastSyncTimeText" class="text-slate-700 font-semibold">-</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="autoSyncCheckbox" checked onchange="toggleAutoSync(this.checked)" class="w-4 h-4 rounded text-hdfc-blue focus:ring-hdfc-blue">
+              <span class="text-slate-700 font-bold">Auto-Sync Active</span>
+            </label>
+            <button onclick="performAutoSync(true)" class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold flex items-center gap-1.5 transition shadow-sm">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="manualSyncSpinner"></i>
+              <span>Sync Now</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export / Import Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3">
+          <h4 class="font-bold text-hdfc-darkblue text-base flex items-center gap-2">
+            <i data-lucide="download" class="w-5 h-5 text-emerald-600"></i>
+            <span>Manual Data Export</span>
+          </h4>
+          <p class="text-xs text-slate-500">Download complete shop ledger for safe storage or spreadsheet viewing.</p>
+          <div class="flex flex-col sm:flex-row gap-3 pt-2">
+            <button onclick="exportJSONBackup()" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition">
+              <i data-lucide="file-json" class="w-4 h-4 text-hdfc-blue"></i>
+              <span>JSON Backup (.json)</span>
+            </button>
+            <button onclick="exportCSVReport()" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition">
+              <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+              <span>Excel Report (.csv)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3">
+          <h4 class="font-bold text-hdfc-darkblue text-base flex items-center gap-2">
+            <i data-lucide="upload" class="w-5 h-5 text-hdfc-blue"></i>
+            <span>Restore from Backup</span>
+          </h4>
+          <p class="text-xs text-slate-500">Upload your previously exported `.json` file to restore all ledgers instantly.</p>
+          <div class="pt-2">
+            <input type="file" id="jsonFileInput" onchange="importJSONBackup(event)" accept=".json" class="hidden">
+            <button onclick="document.getElementById('jsonFileInput').click()" class="w-full px-4 py-2.5 rounded-xl bg-hdfc-accent hover:bg-blue-100 border border-hdfc-border text-hdfc-blue font-bold text-xs flex items-center justify-center gap-2 transition">
+              <i data-lucide="upload" class="w-4 h-4"></i>
+              <span>Choose & Load Backup JSON</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== MODALS CONTAINER ===================== -->
+  <div id="modalOverlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+    <div class="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-fade-in">
+      
+      <!-- Modal Header -->
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <h3 id="modalTitle" class="font-bold text-hdfc-darkblue text-base flex items-center gap-2">
+          <!-- Dynamic Header -->
+        </h3>
+        <button onclick="closeModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div id="modalBody" class="p-5 overflow-y-auto space-y-4 text-sm text-slate-800">
+        <!-- Dynamic Content Injected -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Dedicated Invoice Printable Viewer Modal -->
+  <div id="invoiceModalOverlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm">
+    <div class="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden max-h-[95vh] flex flex-col">
+      
+      <!-- Bar with Print and Close -->
+      <div class="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 no-print">
+        <div class="flex items-center gap-2">
+          <i data-lucide="receipt" class="w-5 h-5 text-hdfc-blue"></i>
+          <span class="font-bold text-hdfc-darkblue text-sm sm:text-base">Tax Invoice & Cash Receipt</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="printCurrentInvoice()" class="px-3.5 py-1.5 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-xs flex items-center gap-1.5 shadow transition">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            <span>Print Invoice</span>
+          </button>
+          <button onclick="downloadInvoicePDF()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow transition">
+            <i data-lucide="file-down" class="w-4 h-4"></i>
+            <span>Download PDF</span>
+          </button>
+          <button onclick="closeInvoiceModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Printable Invoice Sheet Area -->
+      <div id="invoicePrintContainer" class="p-6 sm:p-8 overflow-y-auto space-y-6 text-slate-800 bg-white">
+        <!-- Dynamic invoice content -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Counter Display QR Modal -->
+  <div id="counterQrModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+    <div class="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-2xl p-6 text-center space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="font-bold text-hdfc-darkblue text-base">Scan to Pay via UPI</h3>
+        <button onclick="closeCounterQRModal()" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="w-56 h-56 mx-auto rounded-2xl bg-white border-2 border-hdfc-blue p-2 flex items-center justify-center shadow-lg">
+        <img id="counterQrModalImg" src="" alt="Payment QR" class="w-full h-full object-contain">
+      </div>
+
+      <div>
+        <h4 id="counterQrShopName" class="font-bold text-slate-900 text-sm">Shree Ganesh Supermarket</h4>
+        <p class="text-xs text-slate-500 font-mono mt-1">UPI: <strong id="counterQrUpiId" class="text-hdfc-blue font-bold">suresh.kirana@upi</strong></p>
+      </div>
+
+      <div class="flex items-center justify-center gap-3 pt-2 text-xs text-slate-400 font-medium">
+        <span>GPay</span> • <span>PhonePe</span> • <span>Paytm</span> • <span>BHIM</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== JAVASCRIPT APPLICATION LOGIC ===================== -->
+  <script>
+    // Initial State Database
+    const INITIAL_STATE = {
+      settings: {
+        posEnabled: true
+      },
+      shopInfo: {
+        name: "Shree Ganesh Supermarket & Traders",
+        owner: "Suresh Sharma",
+        phone: "9876543210",
+        upiId: "suresh.kirana@upi",
+        gstin: "08AABCS1429B1Z8",
+        address: "Shop #14, Main Market, Gandhi Chowk",
+        customQrImage: ""
+      },
+      inventory: [
+        { id: "prod-1", sku: "SKU-1001", name: "Fortune Chakki Fresh Atta (5kg)", category: "Groceries", costPrice: 195, sellPrice: 225, stock: 45, minStock: 10, unit: "Pkt" },
+        { id: "prod-2", sku: "SKU-1002", name: "Dhara Refined Sunflower Oil (1L)", category: "Oils", costPrice: 130, sellPrice: 148, stock: 32, minStock: 12, unit: "Pkt" },
+        { id: "prod-3", sku: "SKU-1003", name: "Tata Premium Tea (500g)", category: "Beverages", costPrice: 210, sellPrice: 245, stock: 8, minStock: 10, unit: "Box" },
+        { id: "prod-4", sku: "SKU-1004", name: "Surf Excel Quick Wash (1kg)", category: "Cleaning", costPrice: 125, sellPrice: 145, stock: 24, minStock: 8, unit: "Pkt" },
+        { id: "prod-5", sku: "SKU-1005", name: "Amul Butter (500g)", category: "Dairy", costPrice: 250, sellPrice: 275, stock: 6, minStock: 8, unit: "Pkt" },
+        { id: "prod-6", sku: "SKU-1006", name: "Parle-G Gold Biscuits (1kg)", category: "Snacks", costPrice: 70, sellPrice: 85, stock: 50, minStock: 15, unit: "Pkt" }
+      ],
+      invoices: [
+        {
+          id: "INV-2026-101",
+          date: "2026-08-31",
+          time: "10:30 AM",
+          customerId: "cust-1",
+          customerName: "Rajesh Kumar (Verma Ji)",
+          items: [
+            { id: "prod-1", name: "Fortune Chakki Fresh Atta (5kg)", price: 225, qty: 1, total: 225 },
+            { id: "prod-2", name: "Dhara Refined Sunflower Oil (1L)", price: 148, qty: 2, total: 296 }
+          ],
+          subtotal: 521,
+          discount: 21,
+          taxPercent: 5,
+          taxAmount: 25,
+          grandTotal: 525,
+          paymentMode: "UPI"
+        }
+      ],
+      customers: [
+        {
+          id: "cust-1",
+          name: "Rajesh Kumar (Verma Ji)",
+          phone: "9823145678",
+          address: "Ward No. 4, House 21",
+          transactions: [
+            { id: "t1", date: "2026-08-25", type: "UDHAR", amount: 1250, note: "Grocery essentials" },
+            { id: "t2", date: "2026-08-27", type: "JAMA", amount: 500, note: "GooglePay installment" }
+          ]
+        },
+        {
+          id: "cust-2",
+          name: "Amit Singh (Teacher)",
+          phone: "9712345670",
+          address: "Adarsh Nagar",
+          transactions: [
+            { id: "t3", date: "2026-08-26", type: "UDHAR", amount: 840, note: "Dairy packets & snacks" }
+          ]
+        },
+        {
+          id: "cust-3",
+          name: "Sunil Medical",
+          phone: "9988776655",
+          address: "Hospital Road",
+          transactions: [
+            { id: "t4", date: "2026-08-20", type: "UDHAR", amount: 3200, note: "Bulk packaging goods" },
+            { id: "t5", date: "2026-08-24", type: "JAMA", amount: 3200, note: "Full settlement cash" }
+          ]
+        }
+      ],
+      incomeList: [
+        { id: "inc-1", date: "2026-08-31", amount: 525, source: "POS Bill #INV-2026-101", paymentMode: "UPI", notes: "Counter POS Sale" },
+        { id: "inc-2", date: "2026-08-30", amount: 4500, source: "Counter Cash Sales", paymentMode: "CASH", notes: "Register revenue" }
+      ],
+      expenseList: [
+        { id: "exp-1", date: "2026-08-31", amount: 120, category: "Tea / Refreshments", paymentMode: "CASH", paidTo: "Raju Tea Stall", notes: "Customer tea" },
+        { id: "exp-2", date: "2026-08-30", amount: 450, category: "Freight / Transport", paymentMode: "CASH", paidTo: "Local Transport", notes: "Atta delivery" }
+      ],
+      upiList: [
+        { id: "upi-1", date: "2026-08-31", time: "10:30 AM", amount: 525, upiRef: "424098124578", payerName: "Rajesh Kumar", appName: "PhonePe", verified: true, notes: "Bill #INV-2026-101" }
+      ],
+      retailers: [
+        { id: "ret-1", name: "Mahaveer Agencies (Wholesaler)", contactPerson: "Mahaveer Jain", phone: "9414012345", brandNames: "Parle, Britannia, Nestle, ITC, Tata Tea", balanceDue: 18500, address: "Grain Market, Shop 5" },
+        { id: "ret-2", name: "Balaji Oil & Pulses Distributor", contactPerson: "Mukesh Bhai", phone: "9829098765", brandNames: "Fortune, Dhara, Fortune Atta", balanceDue: 24000, address: "Oil Mill Lane" }
+      ]
+    };
+
+    // State Variables
+    let appState = JSON.parse(JSON.stringify(INITIAL_STATE));
+    let activeTab = 'dashboard';
+    let backupDirHandle = null;
+    let folderName = '';
+    let autoSyncEnabled = true;
+    let selectedCustomerForTxn = null;
+    let currentViewingInvoice = null;
+
+    // POS Cart State
+    let posCart = [];
+    let selectedPosCategory = 'ALL';
+    let currentPosPaymentMode = 'CASH';
+
+    // Toast Notification helper
+    function showToast(msg, isSuccess = true) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      const toastIcon = document.getElementById('toastIcon');
+      toastMsg.innerText = msg;
+      toastIcon.setAttribute('data-lucide', isSuccess ? 'check-circle-2' : 'alert-circle');
+      toastIcon.className = `w-5 h-5 ${isSuccess ? 'text-emerald-600' : 'text-hdfc-red'}`;
+      toast.classList.remove('hidden');
+      lucide.createIcons();
+      setTimeout(hideToast, 4000);
+    }
+    function hideToast() {
+      document.getElementById('toast').classList.add('hidden');
+    }
+
+    // Toggle POS & Inventory Feature ON/OFF
+    function togglePOSFeature(enabled) {
+      appState.settings.posEnabled = enabled;
+      const statusText = document.getElementById('posToggleStatusText');
+      const posActiveBadge = document.getElementById('posActiveBadge');
+      
+      if (enabled) {
+        statusText.innerText = "ENABLED";
+        statusText.className = "text-[11px] font-black text-emerald-700";
+        if (posActiveBadge) posActiveBadge.classList.remove('hidden');
+        document.querySelectorAll('.pos-feature-item').forEach(el => el.classList.remove('hidden'));
+        showToast("POS & Inventory features enabled!");
+      } else {
+        statusText.innerText = "OFF";
+        statusText.className = "text-[11px] font-black text-slate-500";
+        if (posActiveBadge) posActiveBadge.classList.add('hidden');
+        document.querySelectorAll('.pos-feature-item').forEach(el => el.classList.add('hidden'));
+        if (['pos', 'inventory', 'invoices'].includes(activeTab)) {
+          switchTab('dashboard');
+        }
+        showToast("POS features disabled. Traditional Khata mode active.");
+      }
+      onDataModified();
+    }
+
+    // Switch Application Tabs
+    function switchTab(tabName) {
+      activeTab = tabName;
+      const allTabs = ['dashboard', 'pos', 'inventory', 'invoices', 'customers', 'income', 'expenses', 'upi', 'retailers', 'reports', 'profile', 'backup'];
+      
+      allTabs.forEach(t => {
+        const viewEl = document.getElementById(`view-${t}`);
+        const btnEl = document.getElementById(`tab-btn-${t}`);
+        if (viewEl) {
+          if (t === tabName) {
+            viewEl.classList.remove('hidden');
+          } else {
+            viewEl.classList.add('hidden');
+          }
+        }
+        if (btnEl) {
+          if (t === tabName) {
+            btnEl.className = 'tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition bg-hdfc-accent text-hdfc-blue font-black border border-hdfc-border shadow-sm';
+          } else {
+            btnEl.className = 'tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition text-slate-700 hover:text-hdfc-blue hover:bg-slate-100';
+          }
+        }
+      });
+
+      renderAllViews();
+      if (tabName === 'reports') generateReport();
+      if (tabName === 'pos') renderPosProducts();
+      lucide.createIcons();
+    }
+
+    function openQuickModal() {
+      if (activeTab === 'pos' || activeTab === 'inventory') openModal('product');
+      else if (activeTab === 'customers') openModal('customer');
+      else if (activeTab === 'expenses') openModal('expense');
+      else if (activeTab === 'upi') openModal('upi');
+      else if (activeTab === 'retailers') openModal('retailer');
+      else openModal('income');
+    }
+
+    // Local Directory Auto-Sync Backup
+    async function selectBackupFolder() {
+      if ('showDirectoryPicker' in window) {
+        try {
+          const handle = await window.showDirectoryPicker();
+          backupDirHandle = handle;
+          folderName = handle.name;
+          document.getElementById('folderNameStatus').innerHTML = `📁 <span class="text-emerald-600 font-bold">${folderName}</span> (Connected)`;
+          document.getElementById('navFolderLabel').innerText = `Folder: ${folderName}`;
+          document.getElementById('folderBtnLabel').innerText = `Change Folder (${folderName})`;
+          document.getElementById('folderLiveDot').classList.remove('hidden');
+          
+          const navBtn = document.getElementById('navFolderStatusBtn');
+          navBtn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition shadow-sm";
+
+          await performAutoSync(true);
+          showToast(`Storage folder "${folderName}" connected. Auto-sync active!`);
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            showToast("Failed to select folder or permission denied.", false);
+          }
+        }
+      } else {
+        showToast("Your browser does not support folder picker. Use JSON export.", false);
+      }
+    }
+
+    function toggleAutoSync(val) {
+      autoSyncEnabled = val;
+      showToast(val ? "Auto-sync enabled" : "Auto-sync disabled");
+    }
+
+    async function performAutoSync(manualTrigger = false) {
+      const nowStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const lastSyncEl = document.getElementById('lastSyncTimeText');
+      if (lastSyncEl) lastSyncEl.innerText = nowStr;
+
+      if (!backupDirHandle || !autoSyncEnabled) return;
+
+      try {
+        const spinner = document.getElementById('manualSyncSpinner');
+        if (spinner) spinner.classList.add('animate-spin');
+
+        const payload = {
+          ...appState,
+          lastUpdated: new Date().toISOString()
+        };
+        const jsonStr = JSON.stringify(payload, null, 2);
+        const fileHandle = await backupDirHandle.getFileHandle('Shop_SmartVyapar_Backup.json', { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(jsonStr);
+        await writable.close();
+
+        if (spinner) setTimeout(() => spinner.classList.remove('animate-spin'), 600);
+        if (manualTrigger) showToast("Ledger and Inventory synchronized successfully!");
+      } catch (err) {
+        console.error("Auto-sync error:", err);
+      }
+    }
+
+    function onDataModified() {
+      renderAllViews();
+      performAutoSync();
+    }
+
+    // Helper: Customer balance
+    function getCustomerBalance(customer) {
+      if (!customer || !customer.transactions) return 0;
+      const udhar = customer.transactions.filter(t => t.type === 'UDHAR').reduce((a, b) => a + Number(b.amount || 0), 0);
+      const jama = customer.transactions.filter(t => t.type === 'JAMA').reduce((a, b) => a + Number(b.amount || 0), 0);
+      return udhar - jama;
+    }
+
+    // ==========================================
+    // POS SALES LOGIC & CART CALCULATIONS
+    // ==========================================
+    function setPosCategory(cat) {
+      selectedPosCategory = cat;
+      renderPosProducts();
+    }
+
+    function renderPosProducts() {
+      const query = (document.getElementById('posProductSearch')?.value || '').toLowerCase();
+      const grid = document.getElementById('posProductsGrid');
+      const pillsContainer = document.getElementById('posCategoryPills');
+
+      if (!grid) return;
+
+      // Extract unique categories
+      const categories = ['ALL', ...new Set(appState.inventory.map(p => p.category || 'General'))];
+      pillsContainer.innerHTML = categories.map(cat => `
+        <button onclick="setPosCategory('${cat}')" class="px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+          selectedPosCategory === cat ? 'bg-hdfc-blue text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        }">${cat}</button>
+      `).join('');
+
+      // Filter products
+      const filtered = appState.inventory.filter(p => {
+        const matchesCat = selectedPosCategory === 'ALL' || (p.category || 'General') === selectedPosCategory;
+        const matchesQuery = p.name.toLowerCase().includes(query) || (p.sku && p.sku.toLowerCase().includes(query));
+        return matchesCat && matchesQuery;
+      });
+
+      grid.innerHTML = filtered.map(p => {
+        const isOutOfStock = p.stock <= 0;
+        const isLowStock = p.stock <= (p.minStock || 5);
+        return `
+          <div onclick="${isOutOfStock ? '' : `addToPosCart('${p.id}')`}" class="p-3.5 rounded-xl border transition flex flex-col justify-between cursor-pointer select-none ${
+            isOutOfStock ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed' :
+            'bg-white border-slate-200 hover:border-hdfc-blue hover:shadow-md active:scale-95'
+          }">
+            <div>
+              <div class="flex items-center justify-between text-[10px] mb-1">
+                <span class="font-mono font-bold text-slate-400">${p.sku || 'SKU'}</span>
+                <span class="px-1.5 py-0.2 rounded font-bold ${
+                  isOutOfStock ? 'bg-red-100 text-red-700' :
+                  isLowStock ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
+                }">${p.stock} ${p.unit || 'pcs'}</span>
+              </div>
+              <h4 class="font-bold text-slate-800 text-xs line-clamp-2">${p.name}</h4>
+              <span class="text-[10px] text-slate-400">${p.category || 'General'}</span>
+            </div>
+            <div class="mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span class="text-sm font-black text-emerald-700 font-mono">₹${p.sellPrice}</span>
+              <span class="p-1 rounded-lg bg-hdfc-accent text-hdfc-blue text-xs font-bold">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('') || '<div class="col-span-full py-8 text-center text-slate-400 text-xs">No matching products found</div>';
+
+      lucide.createIcons();
+    }
+
+    function addToPosCart(productId) {
+      const prod = appState.inventory.find(p => p.id === productId);
+      if (!prod) return;
+
+      if (prod.stock <= 0) {
+        showToast("Item is out of stock!", false);
+        return;
+      }
+
+      const existing = posCart.find(i => i.id === productId);
+      if (existing) {
+        if (existing.qty + 1 > prod.stock) {
+          showToast(`Only ${prod.stock} items available in stock!`, false);
+          return;
+        }
+        existing.qty += 1;
+        existing.total = existing.qty * existing.price;
+      } else {
+        posCart.push({
+          id: prod.id,
+          name: prod.name,
+          price: prod.sellPrice,
+          qty: 1,
+          total: prod.sellPrice,
+          unit: prod.unit || 'Pcs'
+        });
+      }
+
+      renderPosCart();
+    }
+
+    function updatePosCartQty(productId, delta) {
+      const item = posCart.find(i => i.id === productId);
+      const prod = appState.inventory.find(p => p.id === productId);
+      if (!item) return;
+
+      const newQty = item.qty + delta;
+      if (newQty <= 0) {
+        posCart = posCart.filter(i => i.id !== productId);
+      } else {
+        if (prod && newQty > prod.stock) {
+          showToast(`Stock limit reached (${prod.stock} max)`, false);
+          return;
+        }
+        item.qty = newQty;
+        item.total = item.qty * item.price;
+      }
+      renderPosCart();
+    }
+
+    function clearPosCart() {
+      posCart = [];
+      renderPosCart();
+    }
+
+    function renderPosCart() {
+      const container = document.getElementById('posCartItemsList');
+      if (!container) return;
+
+      if (posCart.length === 0) {
+        container.innerHTML = `
+          <div class="py-8 text-center text-slate-400 space-y-1">
+            <i data-lucide="shopping-bag" class="w-8 h-8 mx-auto opacity-40"></i>
+            <p class="text-xs">Cart is empty. Tap items on left to add.</p>
+          </div>
+        `;
+      } else {
+        container.innerHTML = posCart.map(item => `
+          <div class="py-2 flex items-center justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <h5 class="font-bold text-slate-800 text-xs truncate">${item.name}</h5>
+              <div class="text-[11px] text-slate-500 font-mono">₹${item.price} × ${item.qty} ${item.unit}</div>
+            </div>
+            <div class="flex items-center gap-1">
+              <button onclick="updatePosCartQty('${item.id}', -1)" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs">-</button>
+              <span class="w-6 text-center font-bold text-xs font-mono">${item.qty}</span>
+              <button onclick="updatePosCartQty('${item.id}', 1)" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs">+</button>
+            </div>
+            <div class="text-right font-bold text-slate-800 font-mono text-xs w-16">
+              ₹${item.total}
+            </div>
+          </div>
+        `).join('');
+      }
+
+      calculatePosBill();
+      lucide.createIcons();
+    }
+
+    function calculatePosBill() {
+      const subtotal = posCart.reduce((acc, curr) => acc + curr.total, 0);
+      const discount = Number(document.getElementById('posDiscountInput')?.value || 0);
+      const taxPercent = Number(document.getElementById('posTaxInput')?.value || 0);
+
+      const afterDiscount = Math.max(0, subtotal - discount);
+      const taxAmount = (afterDiscount * taxPercent) / 100;
+      const grandTotal = Math.round(afterDiscount + taxAmount);
+
+      if (document.getElementById('posSubtotalText')) document.getElementById('posSubtotalText').innerText = `₹${subtotal.toLocaleString('en-IN')}`;
+      if (document.getElementById('posGrandTotalText')) document.getElementById('posGrandTotalText').innerText = `₹${grandTotal.toLocaleString('en-IN')}`;
+      
+      return { subtotal, discount, taxPercent, taxAmount, grandTotal };
+    }
+
+    function setPosPaymentMode(mode) {
+      currentPosPaymentMode = mode;
+      const btnCash = document.getElementById('posPayModeCash');
+      const btnUPI = document.getElementById('posPayModeUPI');
+      const btnCredit = document.getElementById('posPayModeCredit');
+
+      const defaultClass = "py-2 px-2 rounded-xl text-xs font-bold border transition bg-slate-100 border-slate-300 text-slate-700 flex items-center justify-center gap-1";
+      btnCash.className = defaultClass;
+      btnUPI.className = defaultClass;
+      btnCredit.className = defaultClass;
+
+      if (mode === 'CASH') btnCash.className = "py-2 px-2 rounded-xl text-xs font-bold border transition bg-emerald-100 border-emerald-400 text-emerald-900 flex items-center justify-center gap-1";
+      if (mode === 'UPI') btnUPI.className = "py-2 px-2 rounded-xl text-xs font-bold border transition bg-blue-100 border-blue-400 text-hdfc-blue flex items-center justify-center gap-1";
+      if (mode === 'CREDIT') btnCredit.className = "py-2 px-2 rounded-xl text-xs font-bold border transition bg-red-100 border-red-400 text-hdfc-red flex items-center justify-center gap-1";
+    }
+
+    function checkoutPosOrder() {
+      if (posCart.length === 0) {
+        showToast("Cart is empty! Add products first.", false);
+        return;
+      }
+
+      const { subtotal, discount, taxPercent, taxAmount, grandTotal } = calculatePosBill();
+      const customerId = document.getElementById('posCustomerSelect').value;
+      const customer = appState.customers.find(c => c.id === customerId);
+      const customerName = customer ? customer.name : "Walk-in Customer";
+      const invoiceNo = `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const dateStr = new Date().toISOString().split('T')[0];
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // Create Invoice Record
+      const newInvoice = {
+        id: invoiceNo,
+        date: dateStr,
+        time: timeStr,
+        customerId: customerId !== 'WALK_IN' ? customerId : null,
+        customerName: customerName,
+        customerPhone: customer ? customer.phone : "",
+        items: JSON.parse(JSON.stringify(posCart)),
+        subtotal,
+        discount,
+        taxPercent,
+        taxAmount,
+        grandTotal,
+        paymentMode: currentPosPaymentMode
+      };
+
+      appState.invoices.unshift(newInvoice);
+
+      // Auto Reduce Inventory Stock
+      posCart.forEach(cartItem => {
+        const prod = appState.inventory.find(p => p.id === cartItem.id);
+        if (prod) {
+          prod.stock = Math.max(0, prod.stock - cartItem.qty);
+        }
+      });
+
+      // Record to Daily Income if Paid (Cash or UPI)
+      if (currentPosPaymentMode !== 'CREDIT') {
+        appState.incomeList.unshift({
+          id: `inc-${Date.now()}`,
+          date: dateStr,
+          amount: grandTotal,
+          source: `POS Sale #${invoiceNo}`,
+          paymentMode: currentPosPaymentMode,
+          notes: `Customer: ${customerName}`
+        });
+
+        if (currentPosPaymentMode === 'UPI') {
+          appState.upiList.unshift({
+            id: `upi-${Date.now()}`,
+            date: dateStr,
+            time: timeStr,
+            amount: grandTotal,
+            upiRef: `REF${Math.floor(100000000000 + Math.random() * 900000000000)}`,
+            payerName: customerName,
+            appName: 'POS QR',
+            verified: true,
+            notes: `Bill #${invoiceNo}`
+          });
+        }
+      } else {
+        // If Credit/Udhar sale -> Post to Customer Khata ledger!
+        if (customer) {
+          customer.transactions.unshift({
+            id: `t-${Date.now()}`,
+            date: dateStr,
+            type: 'UDHAR',
+            amount: grandTotal,
+            note: `POS Invoice #${invoiceNo}`
+          });
+        }
+      }
+
+      // Reset cart and refresh
+      posCart = [];
+      renderPosCart();
+      onDataModified();
+
+      showToast(`Invoice ${invoiceNo} generated successfully!`);
+      viewInvoiceReceipt(newInvoice);
+    }
+
+    function viewInvoiceReceipt(invoice) {
+      currentViewingInvoice = invoice;
+      const modal = document.getElementById('invoiceModalOverlay');
+      const container = document.getElementById('invoicePrintContainer');
+      modal.classList.remove('hidden');
+
+      const qrUrl = appState.shopInfo.customQrImage || `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=${appState.shopInfo.upiId}&pn=${encodeURIComponent(appState.shopInfo.name)}&am=${invoice.grandTotal}&cu=INR`)}`;
+
+      container.innerHTML = `
+        <div class="border-b-2 border-hdfc-blue pb-4 flex items-start justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-hdfc-blue text-white flex items-center justify-center font-black text-sm">SB</div>
+              <h2 class="text-xl font-black text-hdfc-darkblue uppercase tracking-tight">${appState.shopInfo.name}</h2>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">${appState.shopInfo.address}</p>
+            <p class="text-xs text-slate-500">Phone: ${appState.shopInfo.phone} ${appState.shopInfo.gstin ? `• GSTIN: ${appState.shopInfo.gstin}` : ''}</p>
+          </div>
+          <div class="text-right">
+            <span class="inline-block px-2.5 py-1 rounded bg-slate-100 text-slate-800 font-extrabold text-xs">TAX INVOICE</span>
+            <div class="text-sm font-black font-mono text-hdfc-blue mt-1">${invoice.id}</div>
+            <div class="text-xs text-slate-500">${invoice.date} • ${invoice.time}</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 text-xs py-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <div>
+            <span class="font-bold text-slate-500 uppercase">Billed To:</span>
+            <div class="font-black text-slate-800 text-sm">${invoice.customerName}</div>
+            ${invoice.customerPhone ? `<div class="text-slate-500 font-mono">${invoice.customerPhone}</div>` : ''}
+          </div>
+          <div class="text-right">
+            <span class="font-bold text-slate-500 uppercase">Payment Method:</span>
+            <div class="font-black text-emerald-700 text-sm">${invoice.paymentMode}</div>
+            <div class="text-slate-400">Status: ${invoice.paymentMode === 'CREDIT' ? 'DUE IN KHATA' : 'PAID'}</div>
+          </div>
+        </div>
+
+        <table class="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr class="border-b-2 border-slate-300 font-bold text-slate-700">
+              <th class="py-2">Item Description</th>
+              <th class="py-2 text-center">Rate</th>
+              <th class="py-2 text-center">Qty</th>
+              <th class="py-2 text-right">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            ${invoice.items.map(item => `
+              <tr>
+                <td class="py-2 font-bold text-slate-800">${item.name}</td>
+                <td class="py-2 text-center font-mono">₹${item.price}</td>
+                <td class="py-2 text-center font-mono">${item.qty} ${item.unit || ''}</td>
+                <td class="py-2 text-right font-mono font-bold">₹${item.total}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="border-t-2 border-slate-300 pt-3 flex justify-between items-start text-xs">
+          <div class="space-y-1">
+            <div class="font-bold text-slate-700">Scan QR Code to Pay / Settle:</div>
+            <div class="w-24 h-24 p-1 rounded-lg border border-slate-300 bg-white">
+              <img src="${qrUrl}" alt="Invoice UPI QR" class="w-full h-full object-contain">
+            </div>
+            <div class="text-[10px] text-slate-400 font-mono">UPI: ${appState.shopInfo.upiId}</div>
+          </div>
+
+          <div class="w-48 space-y-1.5 font-mono text-xs text-right">
+            <div class="flex justify-between text-slate-600">
+              <span>Subtotal:</span>
+              <span>₹${invoice.subtotal}</span>
+            </div>
+            ${invoice.discount > 0 ? `
+              <div class="flex justify-between text-red-600">
+                <span>Discount:</span>
+                <span>- ₹${invoice.discount}</span>
+              </div>
+            ` : ''}
+            ${invoice.taxPercent > 0 ? `
+              <div class="flex justify-between text-slate-600">
+                <span>Tax (${invoice.taxPercent}%):</span>
+                <span>+ ₹${invoice.taxAmount}</span>
+              </div>
+            ` : ''}
+            <div class="border-t-2 border-slate-800 pt-1 flex justify-between text-sm font-black text-hdfc-darkblue">
+              <span>Grand Total:</span>
+              <span>₹${invoice.grandTotal}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-t border-slate-200 pt-4 flex items-center justify-between text-[11px] text-slate-500">
+          <div>Thank you for your business! Please visit again.</div>
+          <div class="font-bold text-slate-700">Authorized Signature</div>
+        </div>
+      `;
+    }
+
+    function closeInvoiceModal() {
+      document.getElementById('invoiceModalOverlay').classList.add('hidden');
+    }
+
+    function printCurrentInvoice() {
+      document.body.classList.add('printing-invoice');
+      window.print();
+    }
+
+    // Remove the print-mode marker once printing/print-preview is done,
+    // so it never stays on and affects a later print/PDF action.
+    window.addEventListener('afterprint', function () {
+      document.body.classList.remove('printing-invoice');
+      document.body.classList.remove('printing-report');
+    });
+
+    // Download the currently viewed Invoice as a PDF file (for record keeping)
+    async function downloadInvoicePDF() {
+      const element = document.getElementById('invoicePrintContainer');
+      if (!element || !element.innerHTML.trim()) {
+        showToast('No invoice to download.', false);
+        return;
+      }
+      if (!window.html2canvas || !window.jspdf) {
+        showToast('PDF library failed to load. Check internet connection.', false);
+        return;
+      }
+      try {
+        showToast('Generating Invoice PDF...');
+        const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = pageWidth;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+
+        const invoiceIdForFile = currentViewingInvoice ? currentViewingInvoice.id : `INV-${Date.now()}`;
+        pdf.save(`Invoice_${invoiceIdForFile}.pdf`);
+        showToast('Invoice PDF downloaded successfully!');
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to generate PDF.', false);
+      }
+    }
+
+    // ==========================================
+    // INVENTORY & PRODUCT MANAGEMENT
+    // ==========================================
+    function renderInventoryTable() {
+      const query = (document.getElementById('invSearchInput')?.value || '').toLowerCase();
+      const tbody = document.getElementById('inventoryTableBody');
+      if (!tbody) return;
+
+      const filtered = appState.inventory.filter(p => 
+        p.name.toLowerCase().includes(query) || (p.sku && p.sku.toLowerCase().includes(query)) || (p.category && p.category.toLowerCase().includes(query))
+      );
+
+      // Counters
+      const totalCount = appState.inventory.length;
+      const lowStockCount = appState.inventory.filter(p => p.stock <= (p.minStock || 5)).length;
+      
+      document.getElementById('invProductCountHeader').innerText = `${totalCount} Items`;
+      document.getElementById('invLowStockHeader').innerText = `${lowStockCount} Items`;
+
+      const lowStockBadge = document.getElementById('lowStockBadge');
+      if (lowStockCount > 0) {
+        lowStockBadge.innerText = `${lowStockCount} Low`;
+        lowStockBadge.classList.remove('hidden');
+      } else {
+        lowStockBadge.classList.add('hidden');
+      }
+
+      tbody.innerHTML = filtered.map(p => {
+        const isOutOfStock = p.stock <= 0;
+        const isLowStock = p.stock <= (p.minStock || 5);
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="px-4 py-3 font-mono text-xs text-slate-500 font-bold">${p.sku || '-'}</td>
+            <td class="px-4 py-3">
+              <div class="font-bold text-slate-800">${p.name}</div>
+              <span class="text-[11px] text-slate-500 font-medium">${p.category || 'General'}</span>
+            </td>
+            <td class="px-4 py-3 text-right font-mono text-xs text-slate-600">₹${p.costPrice || 0}</td>
+            <td class="px-4 py-3 text-right font-mono font-bold text-slate-800">₹${p.sellPrice || 0}</td>
+            <td class="px-4 py-3 text-center font-mono font-bold text-sm">
+              ${p.stock} <span class="text-[10px] text-slate-400 font-normal">${p.unit || 'pcs'}</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                isOutOfStock ? 'bg-red-100 text-red-800 border border-red-200' :
+                isLowStock ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                'bg-emerald-100 text-emerald-800 border border-emerald-200'
+              }">
+                ${isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <div class="inline-flex items-center gap-1">
+                <button onclick="adjustProductStock('${p.id}', -1)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs">-1</button>
+                <button onclick="adjustProductStock('${p.id}', 1)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs">+1</button>
+                <button onclick="adjustProductStock('${p.id}', 10)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs">+10</button>
+              </div>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <button onclick="deleteProduct('${p.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete Product">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('') || '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-xs">No products in inventory matching search</td></tr>';
+
+      lucide.createIcons();
+    }
+
+    function adjustProductStock(prodId, delta) {
+      const p = appState.inventory.find(i => i.id === prodId);
+      if (p) {
+        p.stock = Math.max(0, p.stock + delta);
+        onDataModified();
+      }
+    }
+
+    function deleteProduct(prodId) {
+      appState.inventory = appState.inventory.filter(p => p.id !== prodId);
+      showToast("Product deleted from inventory.");
+      onDataModified();
+    }
+
+    function renderInvoicesList() {
+      const query = (document.getElementById('invoiceSearchInput')?.value || '').toLowerCase();
+      const tbody = document.getElementById('invoicesTableBody');
+      if (!tbody) return;
+
+      const filtered = appState.invoices.filter(i => 
+        i.id.toLowerCase().includes(query) || (i.customerName && i.customerName.toLowerCase().includes(query))
+      );
+
+      document.getElementById('totalInvoicesCountHeader').innerText = `${appState.invoices.length} Invoices`;
+
+      tbody.innerHTML = filtered.map(inv => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="px-4 py-3 font-mono font-bold text-hdfc-blue text-xs">${inv.id}</td>
+          <td class="px-4 py-3 font-mono text-xs text-slate-500">${inv.date} ${inv.time || ''}</td>
+          <td class="px-4 py-3 font-bold text-slate-800">${inv.customerName}</td>
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold ${
+              inv.paymentMode === 'UPI' ? 'bg-blue-50 border border-blue-200 text-hdfc-blue' :
+              inv.paymentMode === 'CASH' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' :
+              'bg-red-50 border border-red-200 text-red-700'
+            }">${inv.paymentMode}</span>
+          </td>
+          <td class="px-4 py-3 text-center font-mono text-xs text-slate-600">${inv.items.length} items</td>
+          <td class="px-4 py-3 text-right font-mono font-black text-base text-slate-900">₹${inv.grandTotal}</td>
+          <td class="px-4 py-3 text-center">
+            <button onclick='viewInvoiceReceipt(${JSON.stringify(inv)})' class="px-3 py-1 rounded-lg bg-hdfc-accent hover:bg-blue-100 text-hdfc-blue font-bold text-xs flex items-center gap-1 mx-auto transition">
+              <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+              <span>View & Print</span>
+            </button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-400 text-xs">No invoices generated yet</td></tr>';
+
+      lucide.createIcons();
+    }
+
+    // ==========================================
+    // CUSTOMER & OTHER VIEWS RENDERING
+    // ==========================================
+    function renderCustomers() {
+      const query = (document.getElementById('custSearchInput')?.value || '').toLowerCase();
+      const grid = document.getElementById('customersGrid');
+      if (!grid) return;
+      
+      const filtered = appState.customers.filter(c => 
+        c.name.toLowerCase().includes(query) || (c.phone && c.phone.includes(query))
+      );
+
+      // Populate POS customer selector dropdown
+      const posCustSelect = document.getElementById('posCustomerSelect');
+      if (posCustSelect) {
+        posCustSelect.innerHTML = `
+          <option value="WALK_IN">Walk-in Customer (Cash / Direct)</option>
+          ${appState.customers.map(c => `<option value="${c.id}">${c.name} (${c.phone || 'No Phone'})</option>`).join('')}
+        `;
+      }
+
+      grid.innerHTML = filtered.map(customer => {
+        const bal = getCustomerBalance(customer);
+        const lastTxn = customer.transactions[0];
+        return `
+          <div class="p-5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 flex flex-col justify-between transition shadow-sm hover:shadow-md">
+            <div>
+              <div class="flex items-start justify-between">
+                <div>
+                  <h4 class="font-bold text-slate-900 text-base">${customer.name}</h4>
+                  <p class="text-xs text-slate-500 flex items-center gap-1 mt-0.5 font-medium">
+                    <i data-lucide="phone" class="w-3 h-3 text-hdfc-blue"></i>
+                    <span>${customer.phone || 'No Phone'}</span>
+                  </p>
+                </div>
+                <div>
+                  <span class="inline-block px-2.5 py-1 rounded-full text-xs font-bold ${
+                    bal > 0 ? 'bg-red-50 border border-red-200 text-red-700' :
+                    bal < 0 ? 'bg-indigo-50 border border-indigo-200 text-indigo-700' :
+                    'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                  }">
+                    ${bal > 0 ? `₹${bal} Due` : bal < 0 ? `₹${Math.abs(bal)} Advance` : 'Settled'}
+                  </span>
+                </div>
+              </div>
+
+              ${customer.address ? `<p class="text-xs text-slate-500 mt-2 line-clamp-1">📍 ${customer.address}</p>` : ''}
+
+              <div class="mt-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                ${lastTxn ? `
+                  <div class="flex items-center justify-between">
+                    <span>Last: ${lastTxn.type === 'UDHAR' ? 'Credit (Given)' : 'Debit (Received)'}</span>
+                    <span class="${lastTxn.type === 'UDHAR' ? 'text-hdfc-red' : 'text-emerald-600'} font-bold">
+                      ₹${lastTxn.amount} (${lastTxn.date})
+                    </span>
+                  </div>
+                ` : '<span>No transaction history</span>'}
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+              <button onclick="openCustomerTxnModal('${customer.id}')" class="flex-1 py-1.5 px-3 rounded-lg bg-hdfc-accent hover:bg-blue-100 text-xs font-bold text-hdfc-blue text-center transition">
+                + Ledger Entry
+              </button>
+              <button onclick="sendWhatsAppReminder('${customer.id}')" class="p-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 transition" title="WhatsApp Reminder">
+                <i data-lucide="share-2" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteCustomer('${customer.id}')" class="p-2 rounded-lg bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-400 transition" title="Delete Customer">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('') || '<div class="col-span-full py-8 text-center text-slate-400 text-sm">No customers found</div>';
+
+      lucide.createIcons();
+    }
+
+    function sendWhatsAppReminder(custId) {
+      const cust = appState.customers.find(c => c.id === custId);
+      if (!cust) return;
+      const bal = getCustomerBalance(cust);
+      if (bal <= 0) {
+        showToast("This customer has no pending dues.", false);
+        return;
+      }
+      const text = `Dear ${cust.name},\nYour total outstanding balance with ${appState.shopInfo.name} is Rs. ${bal}.\nKindly settle this at your earliest convenience.\n\nYou can also pay directly via UPI ID: ${appState.shopInfo.upiId}\nContact: ${appState.shopInfo.phone}\nThank you!`;
+      const cleanPhone = (cust.phone || '').replace(/[^0-9]/g, '');
+      const phoneWithCode = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+      window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(text)}`, '_blank');
+    }
+
+    function renderIncome() {
+      const total = appState.incomeList.reduce((a, b) => a + Number(b.amount || 0), 0);
+      const header = document.getElementById('totalIncomeHeader');
+      if (header) header.innerText = `₹${total.toLocaleString('en-IN')}`;
+
+      const tbody = document.getElementById('incomeTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = appState.incomeList.map(item => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="px-4 py-3 font-mono text-xs text-slate-500 font-semibold">${item.date}</td>
+          <td class="px-4 py-3 font-bold text-slate-800">${item.source}</td>
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold ${
+              item.paymentMode === 'UPI' ? 'bg-blue-50 border border-blue-200 text-hdfc-blue' :
+              item.paymentMode === 'CASH' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' :
+              'bg-purple-50 border border-purple-200 text-purple-700'
+            }">${item.paymentMode}</span>
+          </td>
+          <td class="px-4 py-3 text-xs text-slate-500">${item.notes || '-'}</td>
+          <td class="px-4 py-3 text-right font-bold text-emerald-600 text-base">+ ₹${Number(item.amount).toLocaleString('en-IN')}</td>
+          <td class="px-4 py-3 text-center">
+            <button onclick="deleteIncome('${item.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-400 text-xs">No income entries recorded</td></tr>';
+
+      lucide.createIcons();
+    }
+
+    function renderExpenses() {
+      const total = appState.expenseList.reduce((a, b) => a + Number(b.amount || 0), 0);
+      const header = document.getElementById('totalExpenseHeader');
+      if (header) header.innerText = `₹${total.toLocaleString('en-IN')}`;
+
+      const tbody = document.getElementById('expenseTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = appState.expenseList.map(item => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="px-4 py-3 font-mono text-xs text-slate-500 font-semibold">${item.date}</td>
+          <td class="px-4 py-3 font-bold text-slate-800">
+            <span class="px-2 py-0.5 rounded text-xs bg-slate-100 border border-slate-200 text-slate-700">${item.category}</span>
+          </td>
+          <td class="px-4 py-3 text-slate-700">${item.paidTo || '-'}</td>
+          <td class="px-4 py-3 text-xs font-semibold text-slate-600">${item.paymentMode}</td>
+          <td class="px-4 py-3 text-xs text-slate-500">${item.notes || '-'}</td>
+          <td class="px-4 py-3 text-right font-bold text-hdfc-red text-base">- ₹${Number(item.amount).toLocaleString('en-IN')}</td>
+          <td class="px-4 py-3 text-center">
+            <button onclick="deleteExpense('${item.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-400 text-xs">No expenses recorded</td></tr>';
+
+      lucide.createIcons();
+    }
+
+    function renderUpi() {
+      const total = appState.upiList.filter(u => u.verified).reduce((a, b) => a + Number(b.amount || 0), 0);
+      const header = document.getElementById('totalUpiHeader');
+      if (header) header.innerText = `₹${total.toLocaleString('en-IN')}`;
+
+      const grid = document.getElementById('upiGrid');
+      if (!grid) return;
+
+      grid.innerHTML = appState.upiList.map(u => `
+        <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md flex flex-col justify-between transition space-y-3">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 border border-blue-200 text-hdfc-blue">${u.appName}</span>
+              <button onclick="toggleUpiVerified('${u.id}')" class="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition ${
+                u.verified ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'
+              }">
+                <i data-lucide="${u.verified ? 'check-circle-2' : 'clock'}" class="w-3 h-3"></i>
+                <span>${u.verified ? 'Verified' : 'Pending Verification'}</span>
+              </button>
+            </div>
+            <div class="mt-3">
+              <div class="text-xs text-slate-400 font-medium">Payer Name</div>
+              <div class="font-bold text-slate-800 text-base">${u.payerName}</div>
+            </div>
+            <div class="mt-2 text-xs font-mono text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200">
+              <div>UTR: <span class="text-hdfc-blue font-bold">${u.upiRef}</span></div>
+              <div class="text-[10px] text-slate-400 mt-0.5">${u.date} • ${u.time}</div>
+            </div>
+            ${u.notes ? `<p class="text-xs text-slate-500 mt-2">Note: ${u.notes}</p>` : ''}
+          </div>
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <div class="text-lg font-black text-emerald-600">₹${Number(u.amount).toLocaleString('en-IN')}</div>
+            <button onclick="deleteUpi('${u.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      `).join('') || '<div class="col-span-full py-8 text-center text-slate-400 text-sm">No UPI transactions found</div>';
+
+      lucide.createIcons();
+    }
+
+    function renderRetailers() {
+      const total = appState.retailers.reduce((a, b) => a + Number(b.balanceDue || 0), 0);
+      const header = document.getElementById('totalRetailerDuesHeader');
+      if (header) header.innerText = `₹${total.toLocaleString('en-IN')}`;
+
+      const grid = document.getElementById('retailersGrid');
+      if (!grid) return;
+
+      grid.innerHTML = appState.retailers.map(r => `
+        <div class="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md flex flex-col justify-between transition space-y-4">
+          <div>
+            <div class="flex items-start justify-between">
+              <div>
+                <h4 class="font-bold text-slate-900 text-base">${r.name}</h4>
+                <p class="text-xs text-slate-500 mt-0.5 font-medium">Contact: ${r.contactPerson} (${r.phone})</p>
+              </div>
+              <div>
+                <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 border border-amber-200 text-amber-800">
+                  ₹${r.balanceDue} Payable
+                </span>
+              </div>
+            </div>
+            <div class="mt-3">
+              <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                <i data-lucide="tag" class="w-3 h-3 text-amber-600"></i>
+                <span>Supplied Brands</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                ${r.brandNames.split(',').map(b => `<span class="px-2 py-0.5 rounded-md text-xs bg-slate-100 border border-slate-200 text-slate-700 font-medium">${b.trim()}</span>`).join('')}
+              </div>
+            </div>
+            ${r.address ? `<p class="text-xs text-slate-500 mt-3 line-clamp-1">📍 ${r.address}</p>` : ''}
+          </div>
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <a href="tel:${r.phone}" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5 transition">
+              <i data-lucide="phone" class="w-3 h-3 text-emerald-600"></i>
+              <span>Call Supplier</span>
+            </a>
+            <button onclick="deleteRetailer('${r.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      `).join('') || '<div class="col-span-full py-8 text-center text-slate-400 text-sm">No suppliers enrolled</div>';
+
+      lucide.createIcons();
+    }
+
+    function renderDashboard() {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Income Today
+      const todayInc = appState.incomeList.filter(i => i.date === today).reduce((a, b) => a + Number(b.amount || 0), 0);
+      document.getElementById('dashTodayIncome').innerText = `₹${todayInc.toLocaleString('en-IN')}`;
+
+      // Expense Today
+      const todayExp = appState.expenseList.filter(e => e.date === today).reduce((a, b) => a + Number(b.amount || 0), 0);
+      document.getElementById('dashTodayExpense').innerText = `₹${todayExp.toLocaleString('en-IN')}`;
+
+      // Customer Udhar
+      let totalUdhar = 0;
+      appState.customers.forEach(c => {
+        const bal = getCustomerBalance(c);
+        if (bal > 0) totalUdhar += bal;
+      });
+      document.getElementById('dashMarketUdhar').innerText = `₹${totalUdhar.toLocaleString('en-IN')}`;
+      document.getElementById('dashCustCount').innerText = `${appState.customers.length} Active Customer Ledgers`;
+
+      const udharBadge = document.getElementById('navUdharBadge');
+      if (totalUdhar > 0) {
+        udharBadge.innerText = `₹${totalUdhar}`;
+        udharBadge.classList.remove('hidden');
+      } else {
+        udharBadge.classList.add('hidden');
+      }
+
+      // Stock Valuation & Low Stock
+      let totalStockVal = 0;
+      let lowStockCount = 0;
+      appState.inventory.forEach(p => {
+        totalStockVal += (p.costPrice || p.sellPrice || 0) * (p.stock || 0);
+        if (p.stock <= (p.minStock || 5)) lowStockCount++;
+      });
+
+      document.getElementById('dashStockValue').innerText = `₹${totalStockVal.toLocaleString('en-IN')}`;
+      document.getElementById('dashLowStockCount').innerText = `${lowStockCount} Products on Low Stock`;
+
+      // Recent Invoices on Dashboard
+      const recentInvContainer = document.getElementById('dashRecentInvoicesList');
+      const sortedInvoices = [...appState.invoices].slice(0, 4);
+      recentInvContainer.innerHTML = sortedInvoices.map(inv => `
+        <div class="py-3 flex items-center justify-between">
+          <div>
+            <div class="font-bold text-slate-800 text-sm">${inv.customerName}</div>
+            <div class="text-xs font-mono text-slate-400">${inv.id} • ${inv.date}</div>
+          </div>
+          <div class="text-right">
+            <div class="font-bold text-emerald-700 text-sm">₹${inv.grandTotal}</div>
+            <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">${inv.paymentMode}</span>
+          </div>
+        </div>
+      `).join('') || '<div class="py-4 text-xs text-slate-400 text-center">No recent POS invoices</div>';
+
+      // Top Udhar Customers on Dashboard
+      const topUdharContainer = document.getElementById('dashTopUdharList');
+      const sortedCusts = [...appState.customers].sort((a, b) => getCustomerBalance(b) - getCustomerBalance(a)).slice(0, 4);
+      topUdharContainer.innerHTML = sortedCusts.map(c => {
+        const bal = getCustomerBalance(c);
+        return `
+          <div class="py-3 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-slate-800 text-sm">${c.name}</div>
+              <div class="text-xs text-slate-500">${c.phone || 'No phone recorded'}</div>
+            </div>
+            <div class="text-right flex items-center gap-3">
+              <div>
+                <div class="font-bold text-sm ${bal > 0 ? 'text-hdfc-red' : 'text-emerald-600'}">₹${bal.toLocaleString('en-IN')}</div>
+                <div class="text-[10px] text-slate-400 font-medium">${bal > 0 ? 'Receivable' : 'Settled'}</div>
+              </div>
+              ${bal > 0 ? `
+                <button onclick="sendWhatsAppReminder('${c.id}')" class="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition" title="Send WhatsApp Reminder">
+                  <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('') || '<div class="py-4 text-xs text-slate-400 text-center">No customer records found</div>';
+    }
+
+    // ==========================================
+    // PROFILE & QR CODE LOGIC
+    // ==========================================
+    function renderProfileView() {
+      const s = appState.shopInfo;
+      document.getElementById('profShopName').value = s.name;
+      document.getElementById('profOwnerName').value = s.owner;
+      document.getElementById('profPhone').value = s.phone;
+      document.getElementById('profUpiId').value = s.upiId;
+      document.getElementById('profGstin').value = s.gstin || '';
+      document.getElementById('profAddress').value = s.address || '';
+      document.getElementById('qrPreviewUpiLabel').innerText = s.upiId;
+
+      const previewImg = document.getElementById('profileQrImagePreview');
+      const placeholder = document.getElementById('noQrPlaceholder');
+      const removeBtn = document.getElementById('removeQrBtn');
+
+      if (s.customQrImage) {
+        previewImg.src = s.customQrImage;
+        previewImg.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        removeBtn.classList.remove('hidden');
+      } else {
+        const dynamicQr = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`upi://pay?pa=${s.upiId}&pn=${encodeURIComponent(s.name)}&cu=INR`)}`;
+        previewImg.src = dynamicQr;
+        previewImg.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        removeBtn.classList.add('hidden');
+      }
+    }
+
+    function saveProfileDetails(e) {
+      e.preventDefault();
+      appState.shopInfo.name = document.getElementById('profShopName').value;
+      appState.shopInfo.owner = document.getElementById('profOwnerName').value;
+      appState.shopInfo.phone = document.getElementById('profPhone').value;
+      appState.shopInfo.upiId = document.getElementById('profUpiId').value;
+      appState.shopInfo.gstin = document.getElementById('profGstin').value;
+      appState.shopInfo.address = document.getElementById('profAddress').value;
+
+      showToast("Store profile & UPI settings updated!");
+      onDataModified();
+    }
+
+    function handleQrImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        appState.shopInfo.customQrImage = e.target.result;
+        showToast("Custom QR code image uploaded successfully!");
+        onDataModified();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeUploadedQrImage() {
+      appState.shopInfo.customQrImage = "";
+      showToast("Custom QR image removed. Default dynamic QR active.");
+      onDataModified();
+    }
+
+    function showCounterQRModal() {
+      const modal = document.getElementById('counterQrModal');
+      const img = document.getElementById('counterQrModalImg');
+      document.getElementById('counterQrShopName').innerText = appState.shopInfo.name;
+      document.getElementById('counterQrUpiId').innerText = appState.shopInfo.upiId;
+
+      const s = appState.shopInfo;
+      img.src = s.customQrImage || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`upi://pay?pa=${s.upiId}&pn=${encodeURIComponent(s.name)}&cu=INR`)}`;
+
+      modal.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeCounterQRModal() {
+      document.getElementById('counterQrModal').classList.add('hidden');
+    }
+
+    // ==========================================
+    // REPORTS ENGINE & EXPORTS
+    // ==========================================
+    let filteredReportData = [];
+
+    function setQuickDateRange(preset) {
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      const startInput = document.getElementById('reportStartDate');
+      const endInput = document.getElementById('reportEndDate');
+
+      if (preset === 'ALL_TIME') {
+        startInput.value = '';
+        endInput.value = '';
+      } else if (preset === 'TODAY') {
+        startInput.value = todayStr;
+        endInput.value = todayStr;
+      } else if (preset === 'YESTERDAY') {
+        const yest = new Date(today);
+        yest.setDate(today.getDate() - 1);
+        startInput.value = yest.toISOString().split('T')[0];
+        endInput.value = yest.toISOString().split('T')[0];
+      } else if (preset === 'LAST_7_DAYS') {
+        const past7 = new Date(today);
+        past7.setDate(today.getDate() - 7);
+        startInput.value = past7.toISOString().split('T')[0];
+        endInput.value = todayStr;
+      } else if (preset === 'THIS_MONTH') {
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+        startInput.value = firstDay;
+        endInput.value = todayStr;
+      }
+      generateReport();
+    }
+
+    function generateReport() {
+      const category = document.getElementById('reportCategorySelect')?.value || 'ALL';
+      const startDate = document.getElementById('reportStartDate')?.value || '';
+      const endDate = document.getElementById('reportEndDate')?.value || '';
+
+      document.getElementById('reportShopTitle').innerText = appState.shopInfo.name;
+      document.getElementById('reportShopMeta').innerText = `${appState.shopInfo.address} • Phone: ${appState.shopInfo.phone} • UPI: ${appState.shopInfo.upiId}`;
+      document.getElementById('reportGeneratedTime').innerText = `Generated on: ${new Date().toLocaleString('en-US')}`;
+
+      if (startDate && endDate) document.getElementById('reportPeriodText').innerText = `Period: ${startDate} to ${endDate}`;
+      else if (startDate) document.getElementById('reportPeriodText').innerText = `Period: From ${startDate}`;
+      else if (endDate) document.getElementById('reportPeriodText').innerText = `Period: Up to ${endDate}`;
+      else document.getElementById('reportPeriodText').innerText = `Period: Complete History`;
+
+      let rows = [];
+
+      // 1. Invoices
+      if (category === 'ALL' || category === 'INVOICES') {
+        appState.invoices.forEach(inv => {
+          rows.push({
+            date: inv.date,
+            category: 'POS INVOICE',
+            party: inv.customerName,
+            mode: inv.paymentMode,
+            notes: `Bill #${inv.id} (${inv.items.length} items)`,
+            inflow: Number(inv.grandTotal),
+            outflow: 0
+          });
+        });
+      }
+
+      // 2. Income
+      if (category === 'ALL' || category === 'INCOME') {
+        appState.incomeList.forEach(item => {
+          if (!item.source.startsWith('POS Sale #')) {
+            rows.push({
+              date: item.date,
+              category: 'DIRECT INCOME',
+              party: item.source,
+              mode: item.paymentMode,
+              notes: item.notes || '-',
+              inflow: Number(item.amount),
+              outflow: 0
+            });
+          }
+        });
+      }
+
+      // 3. Expenses
+      if (category === 'ALL' || category === 'EXPENSE') {
+        appState.expenseList.forEach(item => {
+          rows.push({
+            date: item.date,
+            category: `EXPENSE (${item.category})`,
+            party: item.paidTo || 'Shop Expense',
+            mode: item.paymentMode,
+            notes: item.notes || '-',
+            inflow: 0,
+            outflow: Number(item.amount)
+          });
+        });
+      }
+
+      // 4. Customer Udhar / Jama
+      if (category === 'ALL' || category === 'UDHAR_JAMA') {
+        appState.customers.forEach(cust => {
+          cust.transactions.forEach(t => {
+            rows.push({
+              date: t.date,
+              category: t.type === 'UDHAR' ? 'CUSTOMER CREDIT (Udhar)' : 'CUSTOMER PAYMENT (Jama)',
+              party: cust.name,
+              mode: t.type === 'UDHAR' ? 'Credit' : 'Cash/UPI',
+              notes: t.note || '-',
+              inflow: t.type === 'JAMA' ? Number(t.amount) : 0,
+              outflow: t.type === 'UDHAR' ? Number(t.amount) : 0
+            });
+          });
+        });
+      }
+
+      // Filter by Date
+      if (startDate) rows = rows.filter(r => r.date >= startDate);
+      if (endDate) rows = rows.filter(r => r.date <= endDate);
+
+      rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+      filteredReportData = rows;
+
+      const totalInflow = rows.reduce((acc, curr) => acc + curr.inflow, 0);
+      const totalOutflow = rows.reduce((acc, curr) => acc + curr.outflow, 0);
+      const net = totalInflow - totalOutflow;
+
+      document.getElementById('repSumIncome').innerText = `₹${totalInflow.toLocaleString('en-IN')}`;
+      document.getElementById('repSumExpense').innerText = `₹${totalOutflow.toLocaleString('en-IN')}`;
+      document.getElementById('repSumNet').innerText = `₹${net.toLocaleString('en-IN')}`;
+      document.getElementById('repSumNet').className = `text-lg font-black ${net >= 0 ? 'text-emerald-600' : 'text-hdfc-red'}`;
+      document.getElementById('repSumCount').innerText = rows.length;
+
+      const tbody = document.getElementById('reportTableBody');
+      tbody.innerHTML = rows.map(r => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="px-3 py-2 font-mono text-xs text-slate-500 font-semibold">${r.date}</td>
+          <td class="px-3 py-2">
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+              ${r.category}
+            </span>
+          </td>
+          <td class="px-3 py-2 font-bold text-slate-800 text-xs">${r.party}</td>
+          <td class="px-3 py-2 text-xs font-semibold text-slate-600">${r.mode}</td>
+          <td class="px-3 py-2 text-xs text-slate-500 max-w-xs truncate">${r.notes}</td>
+          <td class="px-3 py-2 text-right font-bold text-emerald-600 text-xs">${r.inflow > 0 ? `+ ₹${r.inflow.toLocaleString('en-IN')}` : '-'}</td>
+          <td class="px-3 py-2 text-right font-bold text-hdfc-red text-xs">${r.outflow > 0 ? `- ₹${r.outflow.toLocaleString('en-IN')}` : '-'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="7" class="px-3 py-8 text-center text-slate-400 text-xs">No records found for selected criteria.</td></tr>';
+    }
+
+    function printCurrentReport() {
+      document.body.classList.add('printing-report');
+      window.print();
+    }
+
+    // Download the currently generated Statement/Report as a PDF file (for record keeping)
+    async function downloadReportPDF() {
+      const element = document.getElementById('printableReportArea');
+      if (!element) {
+        showToast('No report to download.', false);
+        return;
+      }
+      if (!window.html2canvas || !window.jspdf) {
+        showToast('PDF library failed to load. Check internet connection.', false);
+        return;
+      }
+      try {
+        showToast('Generating Report PDF...');
+        const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = pageWidth;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+
+        pdf.save(`Shop_Statement_${new Date().toISOString().split('T')[0]}.pdf`);
+        showToast('Report PDF downloaded successfully!');
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to generate PDF.', false);
+      }
+    }
+
+    function exportFilteredCSV() {
+      if (filteredReportData.length === 0) {
+        showToast("No data to export.", false);
+        return;
+      }
+      let csv = "Date,Category,Party,Payment_Mode,Remarks,Inflow,Outflow\n";
+      filteredReportData.forEach(r => {
+        csv += `${r.date},"${r.category}","${r.party}","${r.mode}","${r.notes}",${r.inflow},${r.outflow}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Shop_Statement_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Statement CSV downloaded successfully!");
+    }
+
+    // Manual JSON & CSV exports
+    function exportJSONBackup() {
+      const fullData = { ...appState, exportedAt: new Date().toISOString() };
+      const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SmartVyapar_Master_Backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("JSON backup downloaded successfully!");
+    }
+
+    function exportCSVReport() {
+      let csv = "Type,Date,Description,Amount,Payment_Mode\n";
+      appState.incomeList.forEach(i => {
+        csv += `INCOME,${i.date},"${i.source}",${i.amount},${i.paymentMode}\n`;
+      });
+      appState.expenseList.forEach(e => {
+        csv += `EXPENSE,${e.date},"${e.category} - ${e.paidTo}",${e.amount},${e.paymentMode}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Shop_Financial_Summary_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Excel CSV report exported successfully!");
+    }
+
+    function importJSONBackup(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          if (parsed.shopInfo) appState.shopInfo = parsed.shopInfo;
+          if (parsed.inventory) appState.inventory = parsed.inventory;
+          if (parsed.invoices) appState.invoices = parsed.invoices;
+          if (parsed.customers) appState.customers = parsed.customers;
+          if (parsed.incomeList) appState.incomeList = parsed.incomeList;
+          if (parsed.expenseList) appState.expenseList = parsed.expenseList;
+          if (parsed.upiList) appState.upiList = parsed.upiList;
+          if (parsed.retailers) appState.retailers = parsed.retailers;
+          if (parsed.settings) appState.settings = parsed.settings;
+
+          onDataModified();
+          showToast("Data restored successfully from backup JSON!");
+        } catch (err) {
+          showToast("Invalid JSON backup file.", false);
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    }
+
+    // Modal Forms Setup
+    const todayISO = new Date().toISOString().split('T')[0];
+
+    function openModal(type) {
+      const modal = document.getElementById('modalOverlay');
+      const title = document.getElementById('modalTitle');
+      const body = document.getElementById('modalBody');
+      modal.classList.remove('hidden');
+
+      if (type === 'product') {
+        title.innerHTML = `<i data-lucide="package-plus" class="w-5 h-5 text-hdfc-blue"></i><span>Add Product to Inventory</span>`;
+        body.innerHTML = `
+          <form onsubmit="submitProduct(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Product Full Name *</label>
+              <input type="text" id="mProdName" required placeholder="e.g. Fortune Sunflower Oil (1L)" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-sm focus:outline-none focus:border-hdfc-blue font-semibold">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                <input type="text" id="mProdCategory" placeholder="e.g. Groceries, Dairy, Snacks" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">SKU / Barcode</label>
+                <input type="text" id="mProdSku" placeholder="e.g. SKU-1007" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-mono text-xs focus:outline-none">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Cost Price (₹)</label>
+                <input type="number" id="mProdCost" required placeholder="0" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-bold focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Selling Price (₹) *</label>
+                <input type="number" id="mProdSell" required placeholder="0" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-emerald-700 font-bold focus:outline-none">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Opening Stock Quantity</label>
+                <input type="number" id="mProdStock" required placeholder="10" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-bold focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Unit (Pcs, Kg, Box, Pkt)</label>
+                <input type="text" id="mProdUnit" placeholder="Pkt" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+              </div>
+            </div>
+            <div class="pt-2">
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-sm shadow">Save Product</button>
+            </div>
+          </form>
+        `;
+      } else if (type === 'customer') {
+        title.innerHTML = `<i data-lucide="user-plus" class="w-5 h-5 text-hdfc-blue"></i><span>Open Customer Ledger Account</span>`;
+        body.innerHTML = `
+          <form onsubmit="submitCustomer(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Customer Full Name *</label>
+              <input type="text" id="mCustName" required placeholder="e.g. Rakesh Sharma" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 focus:outline-none focus:border-hdfc-blue">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Mobile Number (For WhatsApp Reminders)</label>
+              <input type="tel" id="mCustPhone" placeholder="e.g. 9876543210" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 focus:outline-none focus:border-hdfc-blue">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Address / Landmark</label>
+              <input type="text" id="mCustAddress" placeholder="e.g. Gandhi Chowk, House #12" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 focus:outline-none focus:border-hdfc-blue">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Opening Credit Due / Balance (₹)</label>
+              <input type="number" id="mCustUdhar" placeholder="0" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 focus:outline-none focus:border-hdfc-blue">
+            </div>
+            <div class="pt-3">
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-sm shadow">Create Customer Account</button>
+            </div>
+          </form>
+        `;
+      } else if (type === 'income') {
+        title.innerHTML = `<i data-lucide="arrow-down-left" class="w-5 h-5 text-emerald-600"></i><span>Record Daily Income / Direct Revenue</span>`;
+        body.innerHTML = `
+          <form onsubmit="submitIncome(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Amount (₹) *</label>
+              <input type="number" id="mIncAmount" required placeholder="0.00" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-bold text-lg focus:outline-none focus:border-emerald-600">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Source / Description</label>
+              <input type="text" id="mIncSource" placeholder="e.g. Counter Cash Sales, Wholesale Order" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 focus:outline-none focus:border-hdfc-blue text-xs">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Payment Mode</label>
+                <select id="mIncMode" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs font-medium focus:outline-none">
+                  <option value="CASH">CASH</option>
+                  <option value="UPI">UPI (QR Code)</option>
+                  <option value="CARD">Card / Bank Transfer</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Date</label>
+                <input type="date" id="mIncDate" value="${todayISO}" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+              </div>
+            </div>
+            <div class="pt-2">
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow">Save Income Entry</button>
+            </div>
+          </form>
+        `;
+      } else if (type === 'expense') {
+        title.innerHTML = `<i data-lucide="arrow-up-right" class="w-5 h-5 text-hdfc-red"></i><span>Add Shop Expense</span>`;
+        body.innerHTML = `
+          <form onsubmit="submitExpense(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Expense Amount (₹) *</label>
+              <input type="number" id="mExpAmount" required placeholder="0.00" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-bold text-lg focus:outline-none focus:border-red-600">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Expense Category</label>
+                <select id="mExpCategory" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs font-medium focus:outline-none">
+                  <option value="Tea / Refreshments">Tea / Refreshments</option>
+                  <option value="Freight / Transport">Freight / Transport</option>
+                  <option value="Shop Rent">Shop Rent</option>
+                  <option value="Electricity Bill">Electricity Bill</option>
+                  <option value="Staff Salary">Staff Salary</option>
+                  <option value="Maintenance">Maintenance & Repairs</option>
+                  <option value="Other Expenses">Other Expenses</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Paid To</label>
+                <input type="text" id="mExpPaidTo" placeholder="e.g. Landlord, Tea Vendor" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+              </div>
+            </div>
+            <div class="pt-2">
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-hdfc-red hover:bg-hdfc-darkred text-white font-bold text-sm shadow">Save Expense</button>
+            </div>
+          </form>
+        `;
+      } else if (type === 'upi') {
+        title.innerHTML = `<i data-lucide="qr-code" class="w-5 h-5 text-hdfc-blue"></i><span>Record UPI Payment</span>`;
+        body.innerHTML = `
+          <form onsubmit="submitUpi(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Amount (₹) *</label>
+              <input type="number" id="mUpiAmount" required placeholder="0.00" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-bold text-lg focus:outline-none focus:border-hdfc-blue">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Payer Name</label>
+              <input type="text" id="mUpiPayer" placeholder="e.g. Rakesh Sharma" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 focus:outline-none focus:border-hdfc-blue">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">UPI App</label>
+                <select id="mUpiApp" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs font-medium focus:outline-none">
+                  <option value="Google Pay">Google Pay</option>
+                  <option value="PhonePe">PhonePe</option>
+                  <option value="Paytm">Paytm</option>
+                  <option value="POS QR">POS QR</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">UTR / Ref No.</label>
+                <input type="text" id="mUpiRef" placeholder="e.g. REF123456789012" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-mono text-xs focus:outline-none">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Notes</label>
+              <input type="text" id="mUpiNotes" placeholder="e.g. Bill #INV-1023" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+            </div>
+            <div class="pt-2">
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-sm shadow">Save UPI Payment</button>
+            </div>
+          </form>
+        `;
+      } else if (type === 'retailer') {
+        title.innerHTML = `<i data-lucide="truck" class="w-5 h-5 text-amber-600"></i><span>Add Supplier / Retailer</span>`;
+        body.innerHTML = `
+          <form onsubmit="submitRetailer(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Supplier / Company Name *</label>
+              <input type="text" id="mRetName" required placeholder="e.g. Sharma Trading Co." class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 focus:outline-none focus:border-amber-600">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Contact Person</label>
+                <input type="text" id="mRetContact" placeholder="e.g. Suresh" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Phone</label>
+                <input type="tel" id="mRetPhone" placeholder="e.g. 9876543210" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Supplied Brands (comma separated)</label>
+              <input type="text" id="mRetBrands" placeholder="e.g. Fortune, Tata, Amul" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Balance Payable (₹)</label>
+                <input type="number" id="mRetBalance" placeholder="0" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-bold focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Address</label>
+                <input type="text" id="mRetAddress" placeholder="e.g. Sabzi Mandi Road" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+              </div>
+            </div>
+            <div class="pt-2">
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow">Save Supplier</button>
+            </div>
+          </form>
+        `;
+      }
+      lucide.createIcons();
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.add('hidden');
+    }
+
+    // Customer Transaction Ledger Modal
+    let currentTxnType = 'UDHAR';
+    function openCustomerTxnModal(custId) {
+      selectedCustomerForTxn = appState.customers.find(c => c.id === custId);
+      if (!selectedCustomerForTxn) return;
+
+      const modal = document.getElementById('modalOverlay');
+      const title = document.getElementById('modalTitle');
+      const body = document.getElementById('modalBody');
+      modal.classList.remove('hidden');
+
+      const bal = getCustomerBalance(selectedCustomerForTxn);
+      currentTxnType = 'UDHAR';
+
+      title.innerHTML = `<i data-lucide="wallet" class="w-5 h-5 text-hdfc-blue"></i><span>Customer Ledger: ${selectedCustomerForTxn.name}</span>`;
+      body.innerHTML = `
+        <div class="space-y-4">
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+            <span class="text-xs text-slate-500 font-semibold">Current Outstanding Balance:</span>
+            <span class="font-black text-base ${bal > 0 ? 'text-hdfc-red' : 'text-emerald-600'}">₹${bal}</span>
+          </div>
+
+          <form onsubmit="submitCustomerTxn(event)" class="space-y-3">
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" id="btnTypeUdhar" onclick="setTxnType('UDHAR')" class="py-2 rounded-xl font-bold text-xs border transition bg-red-100 border-red-400 text-red-800">
+                - Credit Given (Udhaar)
+              </button>
+              <button type="button" id="btnTypeJama" onclick="setTxnType('JAMA')" class="py-2 rounded-xl font-bold text-xs border transition bg-slate-100 border-slate-200 text-slate-600">
+                + Payment Received (Jama)
+              </button>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Amount (₹) *</label>
+              <input type="number" id="mTxnAmount" required placeholder="0.00" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 font-bold text-lg focus:outline-none focus:border-hdfc-blue">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Particulars / Item Notes</label>
+              <input type="text" id="mTxnNote" placeholder="e.g. 5kg Flour, 1L Refined Oil" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-800 text-xs focus:outline-none">
+            </div>
+
+            <div class="pt-2">
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-hdfc-blue hover:bg-hdfc-darkblue text-white font-bold text-sm shadow">Record Ledger Entry</button>
+            </div>
+          </form>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    function setTxnType(type) {
+      currentTxnType = type;
+      const btnUdhar = document.getElementById('btnTypeUdhar');
+      const btnJama = document.getElementById('btnTypeJama');
+      if (type === 'UDHAR') {
+        btnUdhar.className = 'py-2 rounded-xl font-bold text-xs border transition bg-red-100 border-red-400 text-red-800';
+        btnJama.className = 'py-2 rounded-xl font-bold text-xs border transition bg-slate-100 border-slate-200 text-slate-600';
+      } else {
+        btnUdhar.className = 'py-2 rounded-xl font-bold text-xs border transition bg-slate-100 border-slate-200 text-slate-600';
+        btnJama.className = 'py-2 rounded-xl font-bold text-xs border transition bg-emerald-100 border-emerald-400 text-emerald-800';
+      }
+    }
+
+    function submitCustomerTxn(e) {
+      e.preventDefault();
+      if (!selectedCustomerForTxn) return;
+      const amount = Number(document.getElementById('mTxnAmount').value);
+      const note = document.getElementById('mTxnNote').value || (currentTxnType === 'UDHAR' ? 'Credit Goods' : 'Payment Received');
+      const date = todayISO;
+
+      selectedCustomerForTxn.transactions.unshift({
+        id: `t-${Date.now()}`,
+        date,
+        type: currentTxnType,
+        amount,
+        note
+      });
+
+      if (currentTxnType === 'JAMA') {
+        appState.incomeList.unshift({
+          id: `inc-auto-${Date.now()}`,
+          date,
+          amount,
+          source: `Customer Payment: ${selectedCustomerForTxn.name}`,
+          paymentMode: 'CASH',
+          notes: `Khata Jama: ${note}`
+        });
+      }
+
+      closeModal();
+      showToast(`₹${amount} recorded in ${selectedCustomerForTxn.name}'s ledger!`);
+      onDataModified();
+    }
+
+    function submitProduct(e) {
+      e.preventDefault();
+      const name = document.getElementById('mProdName').value.trim();
+      const category = document.getElementById('mProdCategory').value.trim() || 'Groceries';
+      const sku = document.getElementById('mProdSku').value.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`;
+      const costPrice = Number(document.getElementById('mProdCost').value || 0);
+      const sellPrice = Number(document.getElementById('mProdSell').value || 0);
+      const stock = Number(document.getElementById('mProdStock').value || 0);
+      const unit = document.getElementById('mProdUnit').value.trim() || 'Pkt';
+
+      appState.inventory.unshift({
+        id: `prod-${Date.now()}`,
+        name,
+        category,
+        sku,
+        costPrice,
+        sellPrice,
+        stock,
+        minStock: 8,
+        unit
+      });
+
+      closeModal();
+      showToast(`Product "${name}" added to inventory!`);
+      onDataModified();
+    }
+
+    function submitCustomer(e) {
+      e.preventDefault();
+      const name = document.getElementById('mCustName').value.trim();
+      const phone = document.getElementById('mCustPhone').value.trim();
+      const address = document.getElementById('mCustAddress').value.trim();
+      const udhar = Number(document.getElementById('mCustUdhar').value || 0);
+
+      appState.customers.unshift({
+        id: `cust-${Date.now()}`,
+        name,
+        phone,
+        address,
+        transactions: udhar > 0 ? [{
+          id: `t-${Date.now()}`,
+          date: todayISO,
+          type: 'UDHAR',
+          amount: udhar,
+          note: 'Opening Credit Balance'
+        }] : []
+      });
+
+      closeModal();
+      showToast(`Customer "${name}" registered successfully!`);
+      onDataModified();
+    }
+
+    function submitIncome(e) {
+      e.preventDefault();
+      const amount = Number(document.getElementById('mIncAmount').value);
+      const source = document.getElementById('mIncSource').value || "Counter Sales";
+      const paymentMode = document.getElementById('mIncMode').value;
+      const date = document.getElementById('mIncDate').value || todayISO;
+
+      appState.incomeList.unshift({
+        id: `inc-${Date.now()}`,
+        date,
+        amount,
+        source,
+        paymentMode,
+        notes: "Direct Revenue Entry"
+      });
+
+      closeModal();
+      showToast(`Income of ₹${amount} recorded!`);
+      onDataModified();
+    }
+
+    function submitExpense(e) {
+      e.preventDefault();
+      const amount = Number(document.getElementById('mExpAmount').value);
+      const category = document.getElementById('mExpCategory').value;
+      const paidTo = document.getElementById('mExpPaidTo').value;
+
+      appState.expenseList.unshift({
+        id: `exp-${Date.now()}`,
+        date: todayISO,
+        amount,
+        category,
+        paidTo,
+        paymentMode: 'CASH',
+        notes: "Shop Expense"
+      });
+
+      closeModal();
+      showToast(`Expense of ₹${amount} recorded!`);
+      onDataModified();
+    }
+
+    function submitUpi(e) {
+      e.preventDefault();
+      const amount = Number(document.getElementById('mUpiAmount').value);
+      const payerName = document.getElementById('mUpiPayer').value || "Walk-in Customer";
+      const appName = document.getElementById('mUpiApp').value;
+      const upiRef = document.getElementById('mUpiRef').value || `REF${Math.floor(100000000000 + Math.random() * 900000000000)}`;
+      const notes = document.getElementById('mUpiNotes').value;
+      const dateObj = new Date();
+
+      appState.upiList.unshift({
+        id: `upi-${Date.now()}`,
+        date: dateObj.toISOString().split('T')[0],
+        time: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        amount,
+        upiRef,
+        payerName,
+        appName,
+        verified: true,
+        notes
+      });
+
+      closeModal();
+      showToast(`UPI payment of ₹${amount} recorded!`);
+      onDataModified();
+    }
+
+    function submitRetailer(e) {
+      e.preventDefault();
+      const name = document.getElementById('mRetName').value;
+      const contactPerson = document.getElementById('mRetContact').value;
+      const phone = document.getElementById('mRetPhone').value;
+      const brandNames = document.getElementById('mRetBrands').value || "General";
+      const balanceDue = Number(document.getElementById('mRetBalance').value) || 0;
+      const address = document.getElementById('mRetAddress').value;
+
+      appState.retailers.unshift({
+        id: `ret-${Date.now()}`,
+        name,
+        contactPerson,
+        phone,
+        brandNames,
+        balanceDue,
+        address
+      });
+
+      closeModal();
+      showToast(`Supplier "${name}" added!`);
+      onDataModified();
+    }
+
+    // Delete Helpers
+    function deleteCustomer(id) {
+      appState.customers = appState.customers.filter(c => c.id !== id);
+      showToast("Customer removed.");
+      onDataModified();
+    }
+    function deleteIncome(id) {
+      appState.incomeList = appState.incomeList.filter(i => i.id !== id);
+      showToast("Income entry deleted.");
+      onDataModified();
+    }
+    function deleteExpense(id) {
+      appState.expenseList = appState.expenseList.filter(e => e.id !== id);
+      showToast("Expense entry deleted.");
+      onDataModified();
+    }
+    function deleteUpi(id) {
+      appState.upiList = appState.upiList.filter(u => u.id !== id);
+      showToast("UPI entry deleted.");
+      onDataModified();
+    }
+    function deleteRetailer(id) {
+      appState.retailers = appState.retailers.filter(r => r.id !== id);
+      showToast("Supplier deleted.");
+      onDataModified();
+    }
+    function toggleUpiVerified(id) {
+      appState.upiList = appState.upiList.map(u => u.id === id ? { ...u, verified: !u.verified } : u);
+      onDataModified();
+    }
+
+    // ==========================================
+    // INITIALIZATION & RENDER
+    // ==========================================
+    function renderAllViews() {
+      // Header Info
+      document.getElementById('shopNameDisplay').innerText = appState.shopInfo.name;
+      document.getElementById('shopOwnerDisplay').innerText = appState.shopInfo.owner;
+      document.getElementById('shopUpiDisplay').innerText = appState.shopInfo.upiId;
+
+      renderDashboard();
+      renderInventoryTable();
+      renderInvoicesList();
+      renderCustomers();
+      renderIncome();
+      renderExpenses();
+      renderUpi();
+      renderRetailers();
+      renderProfileView();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      // Initialize master toggle state
+      const masterToggle = document.getElementById('posMasterToggle');
+      if (masterToggle) {
+        masterToggle.checked = appState.settings.posEnabled;
+        togglePOSFeature(appState.settings.posEnabled);
+      }
+      renderAllViews();
+      generateReport();
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
